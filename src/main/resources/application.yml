@@ -1,0 +1,27 @@
+quarkus:
+  application:
+    name: odm-platform-adapter-marketplace-executor
+  http:
+    port: 9019
+  log:
+    console:
+      format: "%d{yyyy-MM-dd HH:mm:ss} [%t] %-5p %c{3.} - %s%e%n"
+  smallrye-openapi:
+    path: /api-docs
+    info-title: ODM Platform Adapter Marketplace Executor API
+    info-description: API for handling marketplace subscription and unsubscription requests
+    info-version: v1.0.0
+    info-license-name: Apache 2.0
+    info-license-url: http://www.apache.org/licenses/LICENSE-2.0.html
+  swagger-ui:
+    always-include: true
+    path: /swagger-ui
+    operations-sorter: method
+    tags-sorter: alpha
+
+# ODM configuration
+odm:
+  product-plane:
+    marketplace-service:
+      active: true
+      address: http://localhost:8085

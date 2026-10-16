@@ -1,0 +1,16 @@
+spec: backend-service-template-state
+specVersion: "1.0.0"
+templateName: blindata-backend-service-template-quarkus
+templateVersion: "1.0.2"
+modules:
+  - usecases
+  - http-service
+  - rest-client
+parameters:
+  groupId: org.opendatamesh
+  artifactId: odm-platform-adapter-marketplace-executor-starter
+  serviceName: ODM Platform Adapter Marketplace Executor Starter
+  serviceClassPrefix: Odm
+  basePackage: org.opendatamesh.platform.adapter.marketplace.executor.starter
+  basePackagePath: org/opendatamesh/platform/adapter/marketplace/executor/starter
+  description: A starter project to implement a custom ODM Platform Adapter Marketplace Executor
