@@ -34,11 +34,11 @@ Request:
       "dataProductPortsFqn": [""]
     },
     "consumer": {
-      "type": "dataproduct | user | team",
-      "identifier": "fqn | email | ?"
+      "type": "USER | TEAM | DATA_PRODUCT | APPLICATION",
+      "identifier": "email | team id | fqn | application id"
     },
     "requester": {
-      "type": "user",
+      "type": "USER",
       "identifier": "email"
     },
     "properties": {},
@@ -47,6 +47,8 @@ Request:
   }
 }
 ```
+
+The consumer and requester types are the Marketplace Service enum values, in upper case. The Marketplace Service rejects any other value when it receives the executor's result (a lower-case `user` makes every result delivery fail with a `500`, so the request stays without a result). The executor itself compares the requester type ignoring case.
 
 ### Result sent to the Marketplace Service
 

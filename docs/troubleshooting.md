@@ -36,7 +36,7 @@ The marketplace shows an `ERROR` result with a technical message:
 | `Jira rejected the integration credentials (HTTP 401/403 ...)` | The service account or token, its product access and the project permissions |
 | `Unable to obtain a Jira OAuth token ...` | Client id and secret, scopes, `jira.auth.oauth2.token-url` |
 | HTTP 400 naming a field | The correlation field (or another field) is not on the create screen or request type; use `correlation-via-edit` for JSM |
-| Requester not found | The requester must be of type `user`, with an email known to Jira; check *Browse users and groups* and email visibility |
+| Requester not found | The requester must be of type `USER`, with an email known to Jira; check *Browse users and groups* and email visibility |
 | JSM 400/403 with a hint | The requester must be a customer of the service project and the integration identity a service desk agent |
 | `Jira Automation webhook rejected the call` | The webhook token and the rule's incoming webhook trigger |
 | HTTP 429 after retries | Raise `jira.rate-limit.max-attempts` or `backoff`, or reduce load |

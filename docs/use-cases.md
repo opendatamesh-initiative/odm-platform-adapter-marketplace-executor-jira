@@ -42,8 +42,8 @@ The example request used in the runs:
       "dataProductFqn": "urn:dp:finance:sales",
       "dataProductPortsFqn": ["urn:dp:finance:sales:port:orders", "urn:dp:finance:sales:port:customers"]
     },
-    "consumer": { "type": "user", "identifier": "jane.doe@acme.com" },
-    "requester": { "type": "user", "identifier": "jane.doe@acme.com" },
+    "consumer": { "type": "USER", "identifier": "jane.doe@acme.com" },
+    "requester": { "type": "USER", "identifier": "jane.doe@acme.com" },
     "properties": {},
     "startDate": "2026-11-01T00:00:00Z",
     "endDate": "2027-11-01T00:00:00Z"

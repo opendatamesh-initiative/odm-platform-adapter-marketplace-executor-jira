@@ -86,7 +86,7 @@ The checks run in this order. The operation, provider and ports always come from
 | `request.identifier` (UUID) | Stored in the correlation custom field (`jira.correlation.field`); optionally also the label `bdmp-<uuid>` (`jira.correlation.label`) |
 | `operation` | Selects the profile: `jira.profiles.subscribe` or `jira.profiles.unsubscribe` |
 | `provider.dataProductFqn`, `dataProductPortsFqn` | Available to the templates; all ports are always reported back |
-| `consumer`, `requester`, `properties`, `startDate`, `endDate` | Available to the templates. The requester (type `user`, identified by email) is also the reporter or the "on behalf of" user |
+| `consumer`, `requester`, `properties`, `startDate`, `endDate` | Available to the templates. The requester (type `USER`, identified by email) is also the reporter or the "on behalf of" user |
 | Issue key, id, link | Reported in the `PENDING` message; the link is `{site-url}/browse/{key}` |
 | Issue status, resolution | Evaluated by the outcome rules to produce the final result |
 
@@ -117,7 +117,7 @@ With `jira.api-version: 3` (Cloud only) every rendered string value whose field 
 
 ### Requester resolution ("on behalf of")
 
-JSM requests are always raised **on behalf of the marketplace requester**, and `ISSUE` does the same for the reporter when `set-reporter` is on. The requester must be of type `user`. The executor searches Jira users by email (`GET /rest/api/{v}/user/search?query=<email>` on Cloud, `GET /rest/api/2/user/search?username=<email>` on Data Center), takes the user whose `emailAddress` equals the identifier (ignoring case) or, if exactly one active user came back, that user. Otherwise no issue is created and an `ERROR` is reported. The executor never falls back to the integration identity.
+JSM requests are always raised **on behalf of the marketplace requester**, and `ISSUE` does the same for the reporter when `set-reporter` is on. The requester must be of type `USER`. The executor searches Jira users by email (`GET /rest/api/{v}/user/search?query=<email>` on Cloud, `GET /rest/api/2/user/search?username=<email>` on Data Center), takes the user whose `emailAddress` equals the identifier (ignoring case) or, if exactly one active user came back, that user. Otherwise no issue is created and an `ERROR` is reported. The executor never falls back to the integration identity.
 
 On Cloud a user's email may be hidden by their privacy settings: the executor then relies on the "exactly one active result" rule.
 
