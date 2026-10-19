@@ -63,7 +63,9 @@ Details in [Concepts](docs/concepts.md).
 
 ## Quick start
 
-You need Java 21, a running Marketplace Service and a Jira site with a correlation custom field. Then:
+You need a running Marketplace Service and a Jira site with a correlation custom field, plus either Java 21 (Maven option) or Docker (image option).
+
+**With Maven**
 
 ```bash
 export JIRA_SITE_URL=https://acme.atlassian.net
@@ -73,7 +75,22 @@ export JIRA_CORRELATION_FIELD=customfield_10050
 ./mvnw quarkus:dev          # listens on port 9019
 ```
 
-You must also provide the issue profiles (`jira.profiles.subscribe` and `jira.profiles.unsubscribe`) in an external `config/application.yml`. The full walkthrough is in [Provisioning](docs/provisioning.md); ready-made profiles are in [Use cases](docs/use-cases.md).
+**With Docker** (published on every release, no Java needed)
+
+```bash
+docker run --rm -p 9019:9019 \
+  -e JIRA_SITE_URL=https://acme.atlassian.net \
+  -e JIRA_API_URL=https://api.atlassian.com/ex/jira/<cloudId> \
+  -e JIRA_CLIENT_ID=... -e JIRA_CLIENT_SECRET=... \
+  -e JIRA_CORRELATION_FIELD=customfield_10050 \
+  -e ODM_PRODUCT_PLANE_MARKETPLACE_SERVICE_ADDRESS=http://host.docker.internal:8085 \
+  -v "$(pwd)/config/application.yml:/work/config/application.yml:ro" \
+  ghcr.io/opendatamesh-initiative/odm-platform-adapter-marketplace-executor-jira:<version>
+```
+
+The image is also on Docker Hub as `opendatamesh/odm-platform-adapter-marketplace-executor-jira`.
+
+You must also provide the issue profiles (`jira.profiles.subscribe` and `jira.profiles.unsubscribe`) in an external `config/application.yml` (mounted at `/work/config/application.yml` in the container). The full walkthrough is in [Provisioning](docs/provisioning.md); ready-made profiles are in [Use cases](docs/use-cases.md).
 
 ## Documentation
 
@@ -82,7 +99,7 @@ You must also provide the issue profiles (`jira.profiles.subscribe` and `jira.pr
 | [Concepts](docs/concepts.md) | Architecture, request lifecycle, status rules, mapping, privacy, scope |
 | [Use cases](docs/use-cases.md) | Five use cases, each with configuration and an example run |
 | [Jira setup](docs/jira-setup.md) | What a Jira admin must prepare: identity, permissions, fields, rules, webhooks |
-| [Provisioning](docs/provisioning.md) | Build, run, secure the notification endpoints, verify, rotate secrets |
+| [Provisioning](docs/provisioning.md) | Build, run (Maven or Docker), deploy, CI/CD and releases, secure the notification endpoints, verify, rotate secrets |
 | [Configuration reference](docs/configuration-reference.md) | Every property, default, environment variable and validation rule |
 | [Templates](docs/templates.md) | Qute templates for issue content and messages, and the data they can use |
 | [API reference](docs/api-reference.md) | The three HTTP endpoints, payloads and answers |
