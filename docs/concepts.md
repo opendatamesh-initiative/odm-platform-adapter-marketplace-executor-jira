@@ -163,7 +163,7 @@ outcome-rules:
     outcome: FAILED
 ```
 
-The resolutions above are the ones shipped by Jira software projects. Check them on your instance, since customers often customise them (see [Jira setup](jira-setup.md#6-statuses-resolutions-and-workflow)). The last rule also covers an unset resolution. Without it, such an issue is ignored and the request stays `PENDING`. Use single quotes for regexes with backslashes (`'\d+'`); a regex with an apostrophe (`Won't Do`) goes in double quotes.
+The resolutions above are the ones shipped by Jira software projects. Check them on your instance, since customers often customise them. [What a resolution is](jira-setup.md#what-a-resolution-is) explains the field, how workflows set it and the recommended setup. The last rule also covers an unset resolution. Without it, such an issue is ignored and the request stays `PENDING`. Use single quotes for regexes with backslashes (`'\d+'`); a regex with an apostrophe (`Won't Do`) goes in double quotes.
 
 ## Rate limiting and delivery retries
 

@@ -55,7 +55,7 @@ The final status only ever comes from a completion notification. Check in this o
    - `UNKNOWN_REQUEST`: the correlation value is not a Marketplace Service UUID;
    - `NOT_HANDLED_BY_EXECUTOR`: the filter does not accept the request any more;
    - `FINAL_RESULT_ALREADY_REPORTED`: a final result already exists;
-   - `NON_TERMINAL_STATE`: no outcome rule matched the fields. Compare the real `statusCategory` / `status` / `resolution` with your rules (regexes are full matches and case-sensitive unless `(?i)`).
+   - `NON_TERMINAL_STATE`: no outcome rule matched the fields. Compare the real `statusCategory` / `status` / `resolution` with your rules (regexes are full matches and case-sensitive unless `(?i)`). An issue closed without a resolution sends an empty `resolution`: see [what a resolution is](jira-setup.md#what-a-resolution-is).
 5. A `500` from the endpoint means the Marketplace Service was unreachable or rejected the result: fix it and re-run the rule (Automation), or wait for Jira's retries (native webhook).
 
 ## Other situations

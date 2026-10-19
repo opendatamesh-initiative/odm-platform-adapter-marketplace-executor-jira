@@ -11,7 +11,7 @@ In short:
 1. Create the integration identity and give it the right permissions.
 2. Create one text custom field (the "correlation field") and put it on the right screens.
 3. Prepare the project (issue type) or the service project (request type) that receives the requests.
-4. Make sure statuses and resolutions match the executor's outcome rules.
+4. Make sure the workflow sets a **resolution** when an issue is closed, and that statuses and resolutions match the executor's outcome rules ([what a resolution is](#what-a-resolution-is)).
 5. Set up **one** completion channel: an Automation rule (recommended) or a native webhook.
 
 Related: [Use cases](use-cases.md) · [Provisioning](provisioning.md) · [Configuration reference](configuration-reference.md) · [Troubleshooting](troubleshooting.md)
@@ -86,11 +86,68 @@ The executor writes the marketplace request UUID in a **single-line text custom 
 
 ## 6. Statuses, resolutions and workflow
 
-The executor decides the outcome from the fields of the completion event: `status`, `statusCategory` (`new`, `indeterminate`, `done`) and `resolution`. The default rules in the examples assume the resolutions shipped by Jira software projects: `Done`, `Won't Do`, `Duplicate`, `Cannot Reproduce`, `Fixed`, `Declined`, and so on.
+The executor decides the outcome from the fields of the completion event: `status`, `statusCategory` (`new`, `indeterminate`, `done`) and `resolution`. Of the three, the **resolution** is the one that says whether access was granted or declined, so it deserves a careful look.
 
-- Check **Settings, Issues, Resolutions** (Cloud) or *Administration, Issues, Resolutions* (Data Center) on your instance, since customers often customise them, and adapt the regexes.
-- Make sure the workflow sets a resolution on the transition to a done status. The last rule in the examples also covers an unset resolution, so every completed issue produces a final result.
-- Subscribe and unsubscribe can share a project and workflow or use different ones.
+### What a resolution is
+
+The **status** says *where* an issue is in its workflow (*To Do*, *In Progress*, *Done*); the **resolution** says *how it ended* (*Done*, *Won't Do*, *Duplicate*...). Two issues can both be in status *Done*, one with resolution *Done* (the work was carried out) and the other with *Won't Do* (it was deliberately not carried out). For an access request this is exactly the difference between "access granted" and "access declined".
+
+Key facts about the field:
+
+- **It is a built-in system field.** Every Jira issue has it, on Cloud and Data Center, in Jira Software and Jira Service Management. Its field id is `resolution`; in the REST API it appears as `fields.resolution` (an object with `id` and `name`, or `null`).
+- **Empty means "unresolved".** Jira considers an issue *resolved* when the field has any value and *unresolved* when it is empty, regardless of the status. JQL (`resolution = Unresolved`), filters, dashboards and reports all rely on it. A common misconfiguration is a workflow that moves issues to *Done* without setting a resolution: they look closed but Jira still counts them as unresolved.
+- **The list of values is global.** Resolutions are defined once for the whole instance and shared by every project: **Settings, Issues, Resolutions** (Cloud) or *Administration, Issues, Resolutions* (Data Center). Typical defaults are *Done*, *Won't Do*, *Duplicate* and *Cannot Reproduce* on Cloud; Data Center instances often also have older ones such as *Fixed*, *Won't Fix* and *Incomplete*. Many organisations add or rename resolutions, so always check your instance.
+- **It is set by workflow transitions, not by editing.** The field is normally not on the create or edit screens. It gets a value in one of these ways:
+  - a **transition screen** that contains the *Resolution* field, so the person closing the issue picks one (the classic "Resolve Issue" screen);
+  - a **post function** "Update issue field → Resolution" on the transition, which sets it automatically (company-managed projects and Data Center);
+  - an **Automation rule** that transitions or edits the issue and sets the resolution;
+  - the project template itself: company-managed Jira Software and Jira Service Management templates usually set it on their done/resolve transitions, while **team-managed projects often leave it empty** unless you add an Automation rule.
+- **It should be cleared on reopen.** A "Reopen" transition should set the resolution back to empty (post function "Update issue field → Resolution: None"). Otherwise a reopened issue still counts as resolved. The executor is not affected (the [first final status wins](concepts.md#status-taxonomy-and-rules)), but your Jira reports are.
+- **The values offered can be restricted per transition.** Since the list is global, use the transition properties `jira.field.resolution.include` / `jira.field.resolution.exclude` (company-managed workflows and Data Center) to show only the meaningful values, for example only *Done* on an "Approve" transition.
+
+### How the executor uses it
+
+The completion event carries the resolution **name** (not its id): the Automation rule sends `{{issue.resolution.name}}` and the native webhook carries `issue.fields.resolution.name`. The executor puts it in the normalised field `resolution`; when the issue has no resolution the value is an **empty string**.
+
+The [outcome rules](concepts.md#outcome-rules) then match it with regular expressions. The rules shipped in the examples map resolutions like this:
+
+| Resolution on the completed issue | Cause | Subscribe result | Unsubscribe result |
+|:--|:--|:--|:--|
+| *Done*, *Fixed*, *Resolved*, *Granted*, *Revoked* | `FULFILLED` | `GRANTED` | `REVOKED` |
+| *Won't Do*, *Won't Fix*, *Declined*, *Rejected*, *Cannot Reproduce*, *Duplicate* | `REFUSED` | `DENIED` | `ERROR` (refused on Jira) |
+| Anything else, or **no resolution** | `FAILED` (fallback rule) | `ERROR` | `ERROR` |
+
+Things to keep in mind when writing the rules:
+
+- Regexes match the **whole** value and are case-sensitive unless they start with `(?i)`.
+- Because an unset resolution is an empty string, a rule with `resolution: ''` matches exactly the issues closed without one. Use it if you want to handle that case differently from an unknown resolution.
+- Rename a resolution in Jira and you must update the regexes too, because the executor sees the name.
+
+### Recommended setup
+
+1. **Check the list** of resolutions on your instance and adapt the regexes in your profiles to the names you actually use.
+2. **Make closing unambiguous.** The simplest workflow has two closing transitions, each setting the resolution with a post function so fulfillers never have to pick one:
+
+   | Transition | To status | Resolution set by post function |
+   |:--|:--|:--|
+   | *Grant* (or *Approve*) | *Done* | *Done* |
+   | *Decline* | *Done* (or *Declined*) | *Won't Do* |
+   | *Reopen* | *To Do* | cleared (None) |
+
+   If you prefer a single *Done* transition, put the *Resolution* field on its transition screen, make it required, and restrict the values offered.
+3. **Keep the fallback rule** (`statusCategory: done` → `FAILED`) last, so that an issue closed without a usable resolution still produces a final result instead of leaving the request `PENDING`.
+4. **Verify** by closing a test issue and reading it back:
+
+   ```bash
+   # <api-base>: the site URL on Data Center, JIRA_API_URL on Cloud with OAuth
+   curl -s -H "Authorization: Bearer $TOKEN" \
+     "<api-base>/rest/api/2/issue/ACC-1?fields=status,resolution" | jq '.fields | {status: .status.name, category: .status.statusCategory.key, resolution: .resolution.name}'
+   # -> {"status":"Done","category":"done","resolution":"Done"}
+   ```
+
+   A `null` resolution on a done issue means the workflow does not set it.
+
+Subscribe and unsubscribe can share a project and workflow or use different ones.
 
 ## 7. Automation incoming webhook (interface `AUTOMATION_WEBHOOK` only)
 
