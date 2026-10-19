@@ -33,6 +33,7 @@ public class MarketplaceExecutorUseCaseResource {
     @APIResponses(value = {
             @APIResponse(responseCode = "202", description = "Request accepted for processing"),
             @APIResponse(responseCode = "400", description = "Invalid request parameters"),
+            @APIResponse(responseCode = "409", description = "Request not handled by this executor (request filter)"),
             @APIResponse(responseCode = "500", description = "Internal server error")
     })
     public Response processRequest(

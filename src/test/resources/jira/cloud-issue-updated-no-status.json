@@ -1,0 +1,42 @@
+{
+  "timestamp": 1760620900000,
+  "webhookEvent": "jira:issue_updated",
+  "issue_event_type_name": "issue_generic",
+  "user": {
+    "accountId": "5b10ac8d82e05b22cc7d4ef5",
+    "displayName": "Jane Doe",
+    "active": true,
+    "accountType": "atlassian"
+  },
+  "issue": {
+    "id": "10001",
+    "self": "https://acme.atlassian.net/rest/api/2/issue/10001",
+    "key": "ACC-1",
+    "fields": {
+      "summary": "Grant urn:dp:finance:sales to a@b.c (reworded)",
+      "issuetype": { "id": "10002", "name": "Task", "subtask": false },
+      "project": { "id": "10000", "key": "ACC", "name": "Access", "projectTypeKey": "software" },
+      "status": {
+        "id": "3",
+        "name": "In Progress",
+        "statusCategory": { "id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress" }
+      },
+      "resolution": null,
+      "customfield_10050": "id-1"
+    }
+  },
+  "changelog": {
+    "id": "10201",
+    "items": [
+      {
+        "field": "summary",
+        "fieldtype": "jira",
+        "fieldId": "summary",
+        "from": null,
+        "fromString": "Grant urn:dp:finance:sales to a@b.c",
+        "to": null,
+        "toString": "Grant urn:dp:finance:sales to a@b.c (reworded)"
+      }
+    ]
+  }
+}

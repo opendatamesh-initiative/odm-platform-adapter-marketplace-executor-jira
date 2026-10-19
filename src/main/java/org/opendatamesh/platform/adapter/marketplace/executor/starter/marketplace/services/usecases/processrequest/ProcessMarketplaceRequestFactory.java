@@ -1,7 +1,9 @@
 package org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.services.usecases.processrequest;
 
-import org.opendatamesh.platform.adapter.marketplace.executor.starter.config.MarketplaceServiceConfig;
-import org.opendatamesh.platform.adapter.marketplace.executor.starter.utils.client.RestUtils;
+import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.services.core.MarketplaceServiceClient;
+import org.opendatamesh.platform.adapter.marketplace.executor.starter.jira.services.core.RequestFilterService;
+import org.opendatamesh.platform.adapter.marketplace.executor.starter.jira.services.core.ResultMessageService;
+import org.opendatamesh.platform.adapter.marketplace.executor.starter.jira.services.core.JiraIssueService;
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.utils.services.programmatic.AsyncExecutorService;
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.utils.usecases.UseCase;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -9,25 +11,33 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class ProcessMarketplaceRequestFactory {
 
-    private final MarketplaceServiceConfig marketplaceServiceConfig;
+    private final RequestFilterService requestFilterService;
+    private final JiraIssueService jiraIssueService;
+    private final ResultMessageService resultMessageService;
+    private final MarketplaceServiceClient marketplaceServiceClient;
     private final AsyncExecutorService asyncExecutorService;
-    private final RestUtils restUtils;
 
     public ProcessMarketplaceRequestFactory(
-            MarketplaceServiceConfig marketplaceServiceConfig,
-            AsyncExecutorService asyncExecutorService,
-            RestUtils restUtils
+            RequestFilterService requestFilterService,
+            JiraIssueService jiraIssueService,
+            ResultMessageService resultMessageService,
+            MarketplaceServiceClient marketplaceServiceClient,
+            AsyncExecutorService asyncExecutorService
     ) {
-        this.marketplaceServiceConfig = marketplaceServiceConfig;
+        this.requestFilterService = requestFilterService;
+        this.jiraIssueService = jiraIssueService;
+        this.resultMessageService = resultMessageService;
+        this.marketplaceServiceClient = marketplaceServiceClient;
         this.asyncExecutorService = asyncExecutorService;
-        this.restUtils = restUtils;
     }
 
     public UseCase buildProcessMarketplaceRequest(ProcessMarketplaceRequestCommand command) {
         return new ProcessMarketplaceRequest(
                 command,
-                new MarketplaceAccessOutboundPortImpl(),
-                new MarketplaceResultOutboundPortImpl(restUtils, marketplaceServiceConfig.address()),
+                new RequestFilterOutboundPortImpl(requestFilterService),
+                new JiraIssueOutboundPortImpl(jiraIssueService),
+                new ResultMessageOutboundPortImpl(resultMessageService),
+                new MarketplaceResultOutboundPortImpl(marketplaceServiceClient),
                 new AsyncExecutionOutboundPortImpl(asyncExecutorService)
         );
     }

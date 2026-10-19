@@ -193,7 +193,9 @@ class AuthenticatedRestUtilsTemplate implements RestUtilsTemplate {
         requestBody.put("grant_type", oauth2Params.getGrantType());
         requestBody.put("client_id", oauth2Params.getClientId());
         requestBody.put("client_secret", oauth2Params.getClientSecret());
-        requestBody.put("scope", oauth2Params.getScope());
+        if (hasText(oauth2Params.getScope())) {
+            requestBody.put("scope", oauth2Params.getScope());
+        }
         return requestBody;
     }
 

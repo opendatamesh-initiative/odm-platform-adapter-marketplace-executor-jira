@@ -5,10 +5,10 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.opendatamesh</groupId>
-    <artifactId>odm-platform-adapter-marketplace-executor-starter</artifactId>
+    <artifactId>odm-platform-adapter-marketplace-executor-jira</artifactId>
     <version>1.0.2-SNAPSHOT</version>
-    <name>ODM Platform Adapter Marketplace Executor Starter</name>
-    <description>A starter project to implement a custom ODM Platform Adapter Marketplace Executor</description>
+    <name>ODM Platform Adapter Marketplace Executor Jira</name>
+    <description>ODM Marketplace Executor that fulfils access requests through Jira issues and Jira Service Management requests</description>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -65,6 +65,11 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-config-yaml</artifactId>
+        </dependency>
+        <!-- ticket templates -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-qute</artifactId>
         </dependency>
         <!-- utils.client (ObjectMapper) -->
         <dependency>

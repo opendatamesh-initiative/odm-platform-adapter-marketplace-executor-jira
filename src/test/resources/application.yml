@@ -1,0 +1,108 @@
+quarkus:
+  application:
+    name: odm-platform-adapter-marketplace-executor-jira
+  http:
+    port: 9019
+  log:
+    console:
+      format: "%d{yyyy-MM-dd HH:mm:ss} [%t] %-5p %c{3.} - %s%e%n"
+  qute:
+    strict-rendering: false
+    property-not-found-strategy: noop
+  smallrye-openapi:
+    path: /api-docs
+    info-title: ODM Platform Adapter Marketplace Executor Jira API
+    info-description: API for fulfilling marketplace subscription and unsubscription requests through Jira issues and Jira Service Management requests, and for receiving Jira issue events
+    info-version: v1.0.0
+    info-license-name: Apache 2.0
+    info-license-url: http://www.apache.org/licenses/LICENSE-2.0.html
+  swagger-ui:
+    always-include: true
+    path: /swagger-ui
+    operations-sorter: method
+    tags-sorter: alpha
+
+# ODM configuration
+odm:
+  product-plane:
+    marketplace-service:
+      active: true
+      address: http://localhost:8085
+      result-delivery:
+        max-attempts: 5
+        backoff: 10ms
+
+# Jira configuration
+jira:
+  deployment: CLOUD
+  site-url: https://acme.atlassian.net
+  api-version: 2
+  auth:
+    type: API_TOKEN
+    api-token:
+      email: bot@acme.com
+      token: test-token
+  correlation:
+    field: customfield_10050
+  rate-limit:
+    backoff: 10ms
+  filter:
+    provider-data-product-fqns:
+      - "urn:dp:finance:.*"
+  profiles:
+    subscribe:
+      type: ISSUE
+      project: ACC
+      issue-type: Task
+      fields:
+        summary: "Grant {request.provider.dataProductFqn} to {request.consumer.identifier}"
+        description: >-
+          Marketplace request {request.identifier} ({operation}).
+          Data product: {request.provider.dataProductFqn}.
+          Ports: {#each request.provider.dataProductPortsFqn}{it}{#if it_hasNext}, {/if}{/each}.
+          Consumer: {request.consumer.type} {request.consumer.identifier}.
+          Requester: {request.requester.type} {request.requester.identifier}.
+          Start: {request.startDate}. End: {request.endDate}.
+      outcome-rules:
+        - when:
+            statusCategory: "done"
+            resolution: "(?i)(Done|Fixed|Resolved|Granted|Revoked)"
+          outcome: FULFILLED
+        - when:
+            statusCategory: "done"
+            resolution: "(?i)(Won't Do|Won't Fix|Declined|Rejected|Cannot Reproduce|Duplicate)"
+          outcome: REFUSED
+        - when:
+            statusCategory: "done"
+          outcome: FAILED
+    unsubscribe:
+      type: SERVICE_DESK_REQUEST
+      service-desk-id: "1"
+      request-type-id: "10"
+      fields:
+        summary: "Revoke {request.provider.dataProductFqn} from {request.consumer.identifier}"
+        description: "Marketplace request {request.identifier} ({operation}) for {request.provider.dataProductFqn}."
+      outcome-rules:
+        - when:
+            status: "(?i)Declined"
+          outcome: REFUSED
+        - when:
+            statusCategory: "done"
+            resolution: "(?i)(Done|Fixed|Resolved|Granted|Revoked)"
+          outcome: FULFILLED
+        - when:
+            statusCategory: "done"
+            resolution: "(?i)(Won't Do|Won't Fix|Declined|Rejected|Cannot Reproduce|Duplicate)"
+          outcome: REFUSED
+        - when:
+            statusCategory: "done"
+          outcome: FAILED
+  messages:
+    pending: "{#if ticket.key}Jira issue {ticket.key} opened{#else}Request submitted to the Jira Automation rule{/if} for {operation} of {request.provider.dataProductFqn} (ports: {#each request.provider.dataProductPortsFqn}{it}{#if it_hasNext}, {/if}{/each}). Awaiting fulfilment{#if ticket.link}: {ticket.link}{/if}"
+    fulfilled: "{outcome.status} through Jira issue {ticket.key} ({ticket.link}){#if ticket.closedBy} by {ticket.closedBy}{/if}: {fields.status}{#if fields.resolution} / {fields.resolution}{/if}.{#if fields.lastComment} Comment: {fields.lastComment}{/if}"
+    refused: "Request refused on Jira: issue {ticket.key} ({ticket.link}){#if ticket.closedBy} by {ticket.closedBy}{/if}, {fields.status}{#if fields.resolution} / {fields.resolution}{/if}.{#if fields.lastComment} Reason: {fields.lastComment}{/if}"
+    failed: "Jira issue {ticket.key} ({ticket.link}) was closed without a recognised resolution ({fields.status}{#if fields.resolution} / {fields.resolution}{/if}).{#if fields.lastComment} Details: {fields.lastComment}{/if}"
+    technical-error: "Technical error while processing {operation} on Jira: {error.message}"
+    closing-user:
+      include: ${JIRA_MESSAGES_INCLUDE_CLOSING_USER:true}
+      field: actor
