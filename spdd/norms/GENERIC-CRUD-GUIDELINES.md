@@ -88,6 +88,35 @@ When one service calls another (e.g. loading a related entity in `reconcile`), u
 
 ---
 
+## Cross-cutting CRUD behaviour (AOP and events)
+
+The template wraps every generic CRUD service in **one interception point** around four method groups — **find**, **create**, **overwrite**, **delete** (mapped `*Resource` variants included) — and publishes two kinds of events.
+
+**Pick the mechanism by scope:**
+
+| Concern | Mechanism |
+| --- | --- |
+| Rule of **one aggregate** that must run in the same transaction as `save` / `delete` | CRUD **hook** on that service (`beforeCreation`, `afterOverWrite`, …) |
+| Concern that applies to **every** CRUD service the same way (history, audit, stewardship, emitters) | **CRUD wrap**: a subclass of the template's wrap type, one per concern |
+| Reaction **outside** the CRUD operation (notify, sync, invalidate) | **Event observer** |
+
+**Events:**
+
+- `CrudLifecycleEvent` (`CREATED`, `OVERWRITTEN`, `DELETED`) is fired by the template's own wrap after a CRUD write: an **operation-level** signal.
+- `EntityChangeEvent` is fired by `HibernateChangeDataCapture` on every insert, update and delete, including those not made through a CRUD service: an **entity-level** signal.
+- Observers that cause side effects outside the database run **after commit**, so a rolled-back write never leaks.
+
+**Rules:**
+
+- A wrap holds **no business policy** and does not change arguments or results. Policy belongs in hooks or use cases.
+- A wrap runs **once per external call**: nested calls (`createResource` → `create`) are not advised again.
+- Several wraps on the same methods declare an **explicit order**.
+- Use cases and outbound port implementations are **never** wrapped. Use cases reach cross-cutting behaviour through ports.
+
+**Quarkus:** subclass `GenericCrudInterceptor`, override `aroundFind` / `aroundCreate` / `aroundOverwrite` / `aroundDelete`, annotate it `@Interceptor @GenericCrudIntercepted` and order it with `@Priority`. Events are fired with CDI `Event<T>`; after-commit observers use `@Observes(during = TransactionPhase.AFTER_SUCCESS)`.
+
+---
+
 ## Controllers and public API
 
 - Prefer **`…Resource` methods** for HTTP adapters so the layer works with `R`, not entities.

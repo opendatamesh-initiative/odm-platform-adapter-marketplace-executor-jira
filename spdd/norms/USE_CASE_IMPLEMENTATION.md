@@ -188,8 +188,10 @@ The factory is the only place that chooses concrete port implementations for tha
 
 ## 10. Testing
 
-- Add or extend **integration tests** for use case controllers (e.g. `*UseCaseControllerIT` under `src/test/java/...rest.v<N>.controllers`) to verify the full stack for the new endpoint.
-- Unit-test complex port adapters or use case logic where it pays off (existing project uses tests such as `*OutboundPortTest` in some areas).
+Follow [`TESTING.md`](./TESTING.md). For a use case that means:
+
+- **Unit tests** (`*Test`) for the use case class with fake ports, covering every business rule and outcome, and for non-trivial port adapters.
+- At least one **integration test** (`*IT`, e.g. `*UseCaseControllerIT`) per new endpoint, with the application running.
 
 ---
 
@@ -201,6 +203,6 @@ The factory is the only place that chooses concrete port implementations for tha
 4. Add **`*UseCasesService`** methods (or extend an existing one): map `*CommandRes` → entity/command, run factory + `execute()`, map domain result from presenter to `*ResultRes`.
 5. Add **`*CommandRes` / `*ResultRes`** under `rest.v<N>.resources.<aggregate>.usecases.<verb>` with OpenAPI `@Schema` as needed.
 6. Add the **`@Path` controller** endpoint calling the use cases service; document with OpenAPI.
-7. Add **integration test** for the new route.
+7. Add the **integration test** (`*IT`) for the new route and **unit tests** (`*Test`) for the use case.
 
 Following these steps keeps new behavior consistent with the existing hexagonal-style layout: **ports/adapters** for infrastructure, **use case** for orchestration, **REST** as a thin adapter on top of the use cases service.
