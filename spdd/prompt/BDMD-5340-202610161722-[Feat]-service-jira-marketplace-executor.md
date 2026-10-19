@@ -271,8 +271,8 @@ JiraUser --> IssueProfile : raiseOnBehalfOf / reporter
 
 1. **Mirror the ServiceNow executor, swap the adapter**:
    - The workflow, use cases, filter, outcome rules, messages, templating, marketplace client and error policy are **copied from the ServiceNow executor** (product-owner decision) and keep the same packages, names, contracts and behaviour.
-   - Only the target-tool adapter is new: configuration, client, creators, requester resolution, ADF conversion, the native-payload mapper and the REST resource.
-   - The copied core services that depended on `ServiceNowConfig` (`RequestFilterService`, `OutcomeRulesService`, `ResultMessageService`, `TicketTemplateRenderer`) move to `{base}.jira.services.core` and depend on `JiraConfig`, whose `Filter`, `OutcomeRule`, `ProfileMessages`, `Messages` and `ClosingUser` shapes are **identical** to ServiceNow's.
+   - Only the target-tool adapter is new: configuration, client, creators, requester resolution, ADF conversion, the native-payload mapper and the REST controller.
+   - The copied classes that depended on `ServiceNowConfig` keep their ServiceNow packages — `RequestFilterService` and `OutcomeRulesService` in `{base}.marketplace.services`, `ResultMessageService` and `TicketTemplateRenderer` in `{base}.client.jira` — and depend on `JiraConfig`, whose `Filter`, `OutcomeRule`, `ProfileMessages`, `Messages` and `ClosingUser` shapes are **identical** to ServiceNow's.
    - **Outbound leg** (unchanged policy):
      - `POST /api/v1/up/marketplace-executor/requests` → invariants → filter (`409 RequestNotHandledException` when declined) → `202`.
      - Asynchronously, open the issue through the profile's interface kind, then report `PENDING` (best effort) or `ERROR`.
@@ -342,7 +342,7 @@ JiraUser --> IssueProfile : raiseOnBehalfOf / reporter
      - cause → status
      - the final post must succeed
      - fetching the last comment **only after** an outcome is determined
-   - Mechanics stay in core services reached through plain port impls:
+   - Mechanics stay in clients and services reached through plain port impls:
      - HTTP, auth, ADF, JSON Pointer reads
      - native-payload mapping
      - user search, retry, Qute, regex
@@ -383,12 +383,12 @@ JiraUser --> IssueProfile : raiseOnBehalfOf / reporter
      - `TicketDetailsOutboundPort` (new)
 
 ### Dependencies
-1. `MarketplaceExecutorUseCaseResource` (existing) depends on `MarketplaceExecutorUseCasesService.processRequest`.
-2. `JiraIssueEventUseCaseResource` (new) depends on `MarketplaceExecutorUseCasesService.processTicketEvent` and `processJiraWebhookEvent`.
+1. `MarketplaceExecutorUseCaseController` (existing) depends on `MarketplaceExecutorUseCasesService.processRequest`.
+2. `JiraIssueEventUseCaseController` (new) depends on `MarketplaceExecutorUseCasesService.processTicketEvent` and `processJiraWebhookEvent`.
 3. `MarketplaceExecutorUseCasesService` depends on `ProcessMarketplaceRequestFactory`, `CompleteTicketFactory`, `ObjectMapper` and `JiraWebhookEventMapper`.
 4. `ProcessMarketplaceRequestFactory` injects `RequestFilterService`, `JiraIssueService`, `ResultMessageService`, `MarketplaceServiceClient` and `AsyncExecutorService`.
 5. `CompleteTicketFactory` injects `MarketplaceServiceClient`, `RequestFilterService`, `OutcomeRulesService`, `ResultMessageService` and `JiraIssueService`.
-6. Core services:
+6. Clients and services:
    - `JiraIssueService` depends on `JiraConfig`, `TicketTemplateRenderer`, `Instance<IssueCreator>` and `JiraClient`.
    - Each `IssueCreator` depends on `JiraClient`, `TicketTemplateRenderer`, `JiraConfig` and `AdfConverter`. `IssueApiCreator` and `ServiceDeskRequestCreator` also depend on `JiraUserService`.
    - `JiraClient` depends on `@JiraApi RestUtils` (from `JiraRestUtilsProducer`), the unqualified `RestUtils` (Automation webhook only), `JiraConfig` and `ObjectMapper`.
@@ -401,13 +401,13 @@ JiraUser --> IssueProfile : raiseOnBehalfOf / reporter
    - `JiraConfigValidator` depends on `JiraConfig`, `RequestFilterService`, `OutcomeRulesService` and `TicketTemplateRenderer`.
 
 ### Layered Architecture
-1. **HTTP layer** (`{base}.rest`, `{base}.resources`): thin JAX-RS resources and `*Res` DTOs with OpenAPI. The native endpoint takes the external payload as `ObjectNode`, because it is a third-party contract, not an executor DTO. The existing `ResponseExceptionMapper` handles errors.
-2. **Application layer** (`{base}.marketplace.services`): `MarketplaceExecutorUseCasesService` maps `*Res` or `ObjectNode` to commands, and presenter results to `*ResultRes`.
+1. **HTTP layer** (`{base}.rest.v1.controllers`, `{base}.rest.v1.resources.marketplace[.usecases.processrequest|completeticket]`): thin controllers and `*Res` DTOs with OpenAPI. The native endpoint takes the external payload as `ObjectNode`, because it is a third-party contract, not an executor DTO. The existing `ResponseExceptionMapper` (unversioned `{base}.rest`) handles errors.
+2. **Application layer** (`{base}.marketplace.services`): `MarketplaceExecutorUseCasesService` maps `*Res` or `ObjectNode` to commands, and presenter results to `*ResultRes`. The same package holds the collaborators that are not clients: `RequestFilterService`, `OutcomeRulesService` and `JiraWebhookEventMapper`.
 3. **Use case layer**: `{base}.marketplace.services.usecases.processrequest` and `…completeticket`, both copied.
 4. **Domain layer** (`{base}.marketplace.domain`): the existing records, the copied `RegisteredAccessRequest`, `TicketEvent`, `TicketOutcomeCause`, `TicketOutcome` and `TicketEventIgnoredReason`, and the new `IssueReference`.
-5. **Core / infrastructure layer**:
-   - `{base}.jira.services.core` (new): `JiraClient`, `JiraIssueService`, `IssueCreator` plus three creators, `JiraUserService` with `JiraUser`, `AdfConverter`, `JiraWebhookEventMapper`, and the copied `TicketTemplateRenderer`, `RequestFilterService`, `OutcomeRulesService` and `ResultMessageService`.
-   - `{base}.marketplace.services.core.MarketplaceServiceClient` (copied).
+5. **Client layer** (outbound integrations; the executor owns no entities, so there is no core package):
+   - `{base}.client.jira` (new): `JiraClient`, `JiraIssueService`, `IssueCreator` plus three creators, `JiraUserService` with `JiraUser`, `AdfConverter`, and the copied `TicketTemplateRenderer` and `ResultMessageService`.
+   - `{base}.client.marketplace.MarketplaceServiceClient` (copied).
 6. **Configuration layer** (`{base}.config`): `JiraConfig`, `IssueInterfaceType`, `JiraDeploymentType`, `JiraAuthType`, the `JiraApi` qualifier, `JiraRestUtilsProducer`, `JiraConfigValidator`, `MarketplaceServiceConfig` (copied extension) and `RestUtilsProducer` (existing).
 7. **Exception layer** (`{base}.exceptions`): the existing hierarchy plus the copied `RequestNotHandledException`.
 
@@ -426,19 +426,19 @@ JiraUser --> IssueProfile : raiseOnBehalfOf / reporter
    - `{base}/exceptions/RequestNotHandledException.java`
    - `{base}/marketplace/domain/RegisteredAccessRequest.java`, `TicketOutcomeCause.java`, `TicketOutcome.java`
    - `{base}/config/MarketplaceServiceConfig.java` (with `ResultDelivery`)
-   - `{base}/marketplace/services/core/MarketplaceServiceClient.java`
+   - `{base}/client/marketplace/MarketplaceServiceClient.java`
    - `{base}/utils/client/AuthenticatedRestUtilsTemplate.java`: only the change that skips a null or blank `scope` in `buildRequestWithSharedSecret`. Apply it as a diff, and do not overwrite other differences.
    - `{base}/marketplace/services/usecases/processrequest/`: `RequestFilterOutboundPort(Impl)`, `ResultMessageOutboundPort(Impl)`, `MarketplaceResultOutboundPortImpl`. Delete `MarketplaceAccessOutboundPort(Impl)` and `MarketplaceResourceMapper`, as in the ServiceNow executor.
    - `{base}/marketplace/services/usecases/completeticket/`: `CompleteTicketCommand`, `CompleteTicketPresenter`, `CompleteTicketMarketplaceOutboundPort(Impl)`, `CompleteTicketFilterOutboundPort(Impl)`, `TicketOutcomeOutboundPort(Impl)`, `CompleteTicketMessageOutboundPort(Impl)`
-   - `{base}/resources/TicketEventCommandRes.java`, `TicketEventResultRes.java`. Change only the `@Schema` descriptions to Jira wording: "Marketplace request UUID stored in the Jira correlation custom field", and "Normalised issue fields used by outcome rules and messages: key, id, project, issueType, status, statusCategory, resolution, actor, lastComment".
+   - `{base}/rest/v1/resources/marketplace/usecases/completeticket/TicketEventCommandRes.java`, `TicketEventResultRes.java`. Change only the `@Schema` descriptions to Jira wording: "Marketplace request UUID stored in the Jira correlation custom field", and "Normalised issue fields used by outcome rules and messages: key, id, project, issueType, status, statusCategory, resolution, actor, lastComment".
    - Tests: `MarketplaceServiceClientTest`, and the use-case tests `ProcessMarketplaceRequestTest` and `CompleteTicketTest` (adapted in tasks 16–17).
-2. Copy **into `{base}/jira/services/core/`**, changing the package, every `ServiceNowConfig` reference to `JiraConfig`, and "ServiceNow" wording to "Jira":
+2. Copy, keeping the ServiceNow packages (`TicketTemplateRenderer` and `ResultMessageService` into `{base}/client/jira/`, `RequestFilterService` and `OutcomeRulesService` into `{base}/marketplace/services/`), and change every `ServiceNowConfig` reference to `JiraConfig`, and "ServiceNow" wording to "Jira":
    - `TicketTemplateRenderer` (no other change)
    - `RequestFilterService` (no other change)
    - `OutcomeRulesService` (no other change)
    - `ResultMessageService` (adapted in task 11)
-   - Their tests `TicketTemplateRendererTest`, `RequestFilterServiceTest` and `ResultMessageServiceTest`, moved to `{test}/jira/services/core/`.
-3. Update the imports of the copied port impls and factories to the `jira.services.core` package.
+   - Their tests `TicketTemplateRendererTest`, `RequestFilterServiceTest` and `ResultMessageServiceTest`, moved to the matching test packages.
+3. Update the imports of the copied port impls and factories to the `client.jira` and `marketplace.services` packages.
 4. Done when the copied classes compile against the configuration from task 4.
 
 ### 3. Create/Update Domain Types (`{base}.marketplace.domain`)
@@ -497,7 +497,7 @@ JiraUser --> IssueProfile : raiseOnBehalfOf / reporter
    - API_TOKEN sends `Basic` with the expected base64.
    - PAT sends `Bearer <pat>`.
 
-### 6. Implement Core Service — `JiraClient` (`{base}.jira.services.core`, `@ApplicationScoped`)
+### 6. Implement Client — `JiraClient` (`{base}.client.jira`, `@ApplicationScoped`)
 1. Dependencies: `@JiraApi RestUtils jiraRestUtils`, `RestUtils plainRestUtils`, `JiraConfig config`, `ObjectMapper objectMapper`.
 2. Methods:
    - `String platformPath(String suffix)`: returns `"/rest/api/" + config.apiVersion() + suffix`.
@@ -516,7 +516,7 @@ JiraUser --> IssueProfile : raiseOnBehalfOf / reporter
    - Never include header values, tokens, the webhook token or the webhook URL in messages or logs.
 3. `JiraClientTest` covers the 401 message without secrets, the token failure, a 400 with an `errors` map, the 429 retry then success, and the 429 retry exhaustion.
 
-### 7. Implement Core Service — `AdfConverter` (`{base}.jira.services.core`, `@ApplicationScoped`)
+### 7. Implement Client Support — `AdfConverter` (`{base}.client.jira`, `@ApplicationScoped`)
 1. Dependency: `ObjectMapper`.
 2. `ObjectNode toAdf(String text)`:
    - Returns `{"type":"doc","version":1,"content":[…]}`.
@@ -532,7 +532,7 @@ JiraUser --> IssueProfile : raiseOnBehalfOf / reporter
    - The result is trimmed.
 4. `AdfConverterTest`: round trip of two paragraphs with a line break, empty input, unknown node types, and nested lists.
 
-### 8. Implement Core Service — `JiraUserService` + `JiraUser` (`{base}.jira.services.core`)
+### 8. Implement Client — `JiraUserService` + `JiraUser` (`{base}.client.jira`)
 1. `public record JiraUser(String accountId, String name)`.
 2. `@ApplicationScoped JiraUserService`, with dependencies `JiraClient` and `JiraConfig`.
    - `JiraUser resolveRequester(Party requester)`, a composed method:
@@ -550,7 +550,7 @@ JiraUser --> IssueProfile : raiseOnBehalfOf / reporter
    - `String onBehalfOf(JiraUser user)`: CLOUD gives `accountId`, DC gives `name`.
 3. `JiraUserServiceTest`: exact email match among several, a single result with a hidden email, no result, an ambiguous result, a non-user requester, and the DC `username` parameter.
 
-### 9. Implement Issue Creators (`{base}.jira.services.core`, each `@ApplicationScoped`, implements `IssueCreator`)
+### 9. Implement Issue Creators (`{base}.client.jira`, each `@ApplicationScoped`, implements `IssueCreator`)
 Shared shape. Each `create(profile, data, request)` is a composed method:
 1. `renderValues(profile, data)` returns an `ObjectNode`:
    - `fields` → `TextNode(renderer.render(v, data))`
@@ -597,7 +597,7 @@ Tests:
 - `ServiceDeskRequestCreatorTest`: on-behalf-of set, correlation-via-edit PUT, edit failure message, requester not found means no request is sent.
 - `AutomationWebhookCreatorTest`: the token header is sent, no Jira credentials are used, the reference is empty.
 
-### 10. Implement Core Service — `JiraIssueService` (`{base}.jira.services.core`, `@ApplicationScoped`)
+### 10. Implement Client — `JiraIssueService` (`{base}.client.jira`, `@ApplicationScoped`)
 1. Dependencies: `JiraConfig`, `TicketTemplateRenderer`, `Instance<IssueCreator>` (into an `EnumMap`), `JiraClient`, `AdfConverter`.
 2. `IssueReference openIssue(MarketplaceOperation operation, MarketplaceRequest request)`:
    - `profile = config.profiles().forOperation(operation)`, `data = renderer.requestData(operation, request)`, `return creators.get(profile.type()).create(profile, data, request)`.
@@ -608,14 +608,14 @@ Tests:
    - Return a copy of `fields` with `lastComment` set (`""` when there are no comments).
    - **Any** exception: log at warn (`"Last comment of Jira issue {} not read: {}"`) and return `fields` unchanged.
 
-### 11. Adapt Copied Core Service — `ResultMessageService` (`{base}.jira.services.core`)
+### 11. Adapt Copied Client — `ResultMessageService` (`{base}.client.jira`)
 1. Change the constructor dependency `ServiceNowClient` to `JiraClient`.
 2. `pending(op, req, IssueReference issue)`: `ticket` = `{key, id, link}`.
 3. `finalOutcome(...)`: `ticket` from the fields: `key`, `id`, `link = client.browseLink(fields.key)`, and `closedBy = fields[closing-user.field]` when inclusion is enabled.
 4. Keep the template choice, the field exposure and its removal when the closing user is excluded, the trim and the 4000-character truncation **unchanged**.
 5. Adapt `ResultMessageServiceTest` to these keys. It must still cover "closing user excluded → not exposed".
 
-### 12. Implement Core Service — `JiraWebhookEventMapper` (`{base}.jira.services.core`, `@ApplicationScoped`)
+### 12. Implement Service — `JiraWebhookEventMapper` (`{base}.marketplace.services`, `@ApplicationScoped`)
 1. Dependencies: `JiraConfig`, `AdfConverter`.
 2. `TicketEvent toEvent(JsonNode payload)`, a composed method:
    1. A null or non-object payload gives `new TicketEvent(null, Map.of(), false)`.
@@ -693,7 +693,7 @@ Tests:
 3. Never print secrets or the webhook token.
 4. `JiraConfigValidatorTest`: v3 on DC, PAT on Cloud, OAuth Cloud without the API URL, a correlation field that is not custom, a field overriding the correlation field, a missing JSM ids, a valid config.
 
-### 15. Verify Copied Core Service — `MarketplaceServiceClient` (`{base}.marketplace.services.core`)
+### 15. Verify Copied Client — `MarketplaceServiceClient` (`{base}.client.marketplace`)
 1. No new code: `MarketplaceServiceClient` and its test are copied unchanged in task 2 (bounded retry on 404, 5xx and I/O errors; lookup; final-result check).
 2. Done when `MarketplaceServiceClientTest` passes in this repository.
 
@@ -725,16 +725,16 @@ Tests:
 2. Add `public TicketEventResultRes processJiraWebhookEvent(ObjectNode payload)`: `new CompleteTicketCommand(mapper.toEvent(payload))`, then the same holder and execution as `processTicketEvent`. A private `run(TicketEvent)` step is shared by both methods.
 3. `processRequest` stays unchanged.
 
-### 19. Create REST Resource — `JiraIssueEventUseCaseResource` (`{base}.rest`)
+### 19. Create REST Controller — `JiraIssueEventUseCaseController` (`{base}.rest.v1.controllers`)
 1. `@Path("/api/v1/up/marketplace-executor/webhooks/jira")`, `@Produces` and `@Consumes(MediaType.APPLICATION_JSON)`, and `@Tag(name = "Jira Issue Events", description = "Completion notifications sent by Jira (through the blindata-agent proxy) when an issue changes status")`.
 2. Endpoints:
    - `@POST @Path("/issue-events") public TicketEventResultRes receiveIssueEvent(@RequestBody TicketEventCommandRes body)`: the Automation channel.
    - `@POST @Path("/native-events") public TicketEventResultRes receiveNativeEvent(@RequestBody ObjectNode payload)`: the native Jira webhook payload, documented as an object.
 3. OpenAPI responses for both: `200` (reported or ignored, `TicketEventResultRes`) and `500` (processing failure; native webhooks are retried by Jira).
-4. Copy the `409` `@APIResponse` on `MarketplaceExecutorUseCaseResource` from the ServiceNow executor.
+4. Copy the `409` `@APIResponse` on `MarketplaceExecutorUseCaseController` from the ServiceNow executor.
 
 ### 20. Update Tests
-1. Rework `MarketplaceExecutorUseCaseResourceTest.validSubscribeRequestIsAccepted`:
+1. Rework `MarketplaceExecutorUseCaseControllerTest.validSubscribeRequestIsAccepted`:
    - stub `@JiraApi RestUtils.genericPost(contains("/rest/api/2/issue"), …)` to return `{"id":"10001","key":"ACC-1"}`
    - verify the PENDING result posted to `/requests/id-1/results`
    - use `dataProductFqn: "urn:dp:finance:sales"`
@@ -921,9 +921,9 @@ Feature: Configuration safety
 
 | Feature / Scenario | Test class | Method |
 | --- | --- | --- |
-| Open issue / Subscribe request opens a Jira issue and reports PENDING | `MarketplaceExecutorUseCaseResourceTest` | `whenSubscribeRequestThenIssueOpenedAndPendingReported` |
+| Open issue / Subscribe request opens a Jira issue and reports PENDING | `MarketplaceExecutorUseCaseControllerTest` | `whenSubscribeRequestThenIssueOpenedAndPendingReported` |
 | Open issue / Templates cannot override the correlation field | `JiraConfigValidatorTest` | `whenFieldOverridesCorrelationThenValidationFails` |
-| Open issue / Unsubscribe request raises a JSM request on behalf of the requester | `MarketplaceExecutorUseCaseResourceTest` | `whenUnsubscribeRequestThenJsmRequestRaisedOnBehalfOfRequester` |
+| Open issue / Unsubscribe request raises a JSM request on behalf of the requester | `MarketplaceExecutorUseCaseControllerTest` | `whenUnsubscribeRequestThenJsmRequestRaisedOnBehalfOfRequester` |
 | Open issue / Unknown requester fails the JSM request | `ServiceDeskRequestCreatorTest` | `whenRequesterNotFoundThenNoRequestRaised` + `ProcessMarketplaceRequestTest.whenIssueCreationFailsThenErrorReported` |
 | Open issue / JSM correlation set by a follow-up edit | `ServiceDeskRequestCreatorTest` | `whenCorrelationViaEditThenIssueFieldUpdated` |
 | Open issue / Automation webhook kind reports PENDING without an issue key | `AutomationWebhookCreatorTest` | `whenAutomationKindThenTokenSentAndEmptyReference` |
@@ -932,19 +932,19 @@ Feature: Configuration safety
 | Open issue / Rate-limited creation is retried | `JiraClientTest` | `whenRateLimitedOnceThenRetriedAndSucceeds` |
 | Open issue / Service account client credentials authenticate Jira Cloud calls | `JiraRestUtilsProducerTest` | `whenOauthClientCredentialsThenBearerTokenRequested` |
 | Open issue / Personal access token authenticates Jira Data Center calls | `JiraRestUtilsProducerTest` | `whenPersonalAccessTokenThenBearerHeaderSent` |
-| Filtering / Request outside the filter is declined without side effects | `MarketplaceExecutorUseCaseResourceTest` | `whenRequestOutsideFilterThenConflictAndNoSideEffects` |
+| Filtering / Request outside the filter is declined without side effects | `MarketplaceExecutorUseCaseControllerTest` | `whenRequestOutsideFilterThenConflictAndNoSideEffects` |
 | Filtering / Request with only some ports inside the port filter is declined as a whole | `RequestFilterServiceTest` | `whenSomePortsDoNotMatchThenRequestNotAccepted` |
-| Automation / Done issue with a fulfilled resolution grants access for all ports | `JiraIssueEventUseCaseResourceTest` | `whenIssueDoneThenGrantedWithAllPorts` |
+| Automation / Done issue with a fulfilled resolution grants access for all ports | `JiraIssueEventUseCaseControllerTest` | `whenIssueDoneThenGrantedWithAllPorts` |
 | Automation / Won't Do resolution denies the subscribe request | `CompleteTicketTest` | `whenSubscribeIssueRefusedThenDenied` |
 | Automation / Refused unsubscribe is reported as a descriptive ERROR | `CompleteTicketTest` | `whenUnsubscribeIssueRefusedThenDescriptiveError` |
 | Automation / Done issue without a recognised resolution is reported as failed | `CompleteTicketTest` | `whenDoneWithoutRecognisedResolutionThenFailed` |
 | Automation / Actor is omitted when closing-user inclusion is disabled | `ResultMessageServiceTest` | `whenClosingUserExcludedThenNotExposedToTemplates` |
-| Automation / First final status wins after a reopen | `JiraIssueEventUseCaseResourceTest` | `whenFinalResultExistsThenEventIgnored` |
+| Automation / First final status wins after a reopen | `JiraIssueEventUseCaseControllerTest` | `whenFinalResultExistsThenEventIgnored` |
 | Automation / In-progress transition is ignored | `CompleteTicketTest` | `whenNoRuleMatchesThenIgnoredAsNonTerminal` |
-| Automation / Missing correlation is ignored | `JiraIssueEventUseCaseResourceTest` | `whenCorrelationMissingThenIgnored` + `whenBodyEmptyThenIgnoredAsMissingCorrelation` |
-| Automation / Marketplace unavailable makes the endpoint fail for retry | `JiraIssueEventUseCaseResourceTest` | `whenMarketplaceUnavailableThenServerError` |
-| Native / Native status transition to Done grants access | `JiraIssueEventUseCaseResourceTest` | `whenNativeStatusTransitionToDoneThenGranted` |
-| Native / Native edit that does not change the status is ignored without lookups | `JiraIssueEventUseCaseResourceTest` | `whenNativeEditWithoutStatusChangeThenIgnoredWithoutLookups` |
+| Automation / Missing correlation is ignored | `JiraIssueEventUseCaseControllerTest` | `whenCorrelationMissingThenIgnored` + `whenBodyEmptyThenIgnoredAsMissingCorrelation` |
+| Automation / Marketplace unavailable makes the endpoint fail for retry | `JiraIssueEventUseCaseControllerTest` | `whenMarketplaceUnavailableThenServerError` |
+| Native / Native status transition to Done grants access | `JiraIssueEventUseCaseControllerTest` | `whenNativeStatusTransitionToDoneThenGranted` |
+| Native / Native edit that does not change the status is ignored without lookups | `JiraIssueEventUseCaseControllerTest` | `whenNativeEditWithoutStatusChangeThenIgnoredWithoutLookups` |
 | Native / Last comment is read from Jira when the payload lacks it | `CompleteTicketTest` | `whenOutcomeFoundThenLastCommentFetchedForMessage` |
 | Native / Last comment failure does not block the result | `JiraIssueServiceTest` | `whenCommentReadFailsThenFieldsReturnedUnchanged` |
 | Native / Data Center payload is mapped like Cloud | `JiraWebhookEventMapperTest` | `whenDataCenterPayloadThenNormalisedFields` |
@@ -996,9 +996,9 @@ Rewrite the README for the Jira executor in the ServiceNow README's style (badge
 ## Norms
 
 1. **Annotation standards** (`spdd/norms/README.md`, `spdd/norms/USE_CASE_IMPLEMENTATION.md`):
-   - `@Path` + `@Produces(MediaType.APPLICATION_JSON)` on `*UseCaseResource` in the unversioned `{base}.rest` package.
-   - OpenAPI `@Tag`, `@Operation`, `@APIResponses` and `@RequestBody` on resources, in the flavour already used by `MarketplaceExecutorUseCaseResource`. `@Schema` goes on DTO fields.
-   - `@ApplicationScoped` only on factories, the use cases service, core services, creators, clients, the mapper, the converter and the validator. **Never** on use case classes or `*OutboundPortImpl`.
+   - `@Path` + `@Produces(MediaType.APPLICATION_JSON)` on `*UseCaseController` in `{base}.rest.v1.controllers`; `*Res` DTOs in `{base}.rest.v1.resources.marketplace[.usecases.<verb>]`.
+   - OpenAPI `@Tag`, `@Operation`, `@APIResponses` and `@RequestBody` on controllers, in the flavour already used by `MarketplaceExecutorUseCaseController`. `@Schema` goes on DTO fields.
+   - `@ApplicationScoped` only on factories, the use cases service, clients, creators, the filter and outcome-rule services, the mapper, the converter and the validator. **Never** on use case classes or `*OutboundPortImpl`.
    - `@ConfigMapping` + `@WithDefault` for configuration.
 2. **Dependency injection**:
    - Constructor injection everywhere.
@@ -1017,11 +1017,12 @@ Rewrite the README for the Jira executor in the ServiceNow README's style (badge
 5. **Layering and boundaries** (`USE_CASE_IMPLEMENTATION.md` hard boundaries):
    - No `*Res` or `ObjectNode` inside `{base}.marketplace.services.usecases.*`. The native payload is mapped to `TicketEvent` in the use cases service, through `JiraWebhookEventMapper`.
    - Commands and presenters use domain types only.
-   - Policy lives in the use cases, mechanics in core services (`USE_CASE_IMPLEMENTATION.md` §5).
+   - No core package: the executor owns no entities. Outbound integrations are clients in `{base}.client.<system>`; collaborators that are not clients stay in `{base}.marketplace.services` (`USE_CASE_IMPLEMENTATION.md` §9).
+   - Policy lives in the use cases, mechanics in clients and services (`USE_CASE_IMPLEMENTATION.md` §5).
 6. **Code structure** (`spdd/norms/CODE_STRUCTURE.md`):
    - Composed method (step-down) in every new or adapted public method.
    - Method bodies stay well under ~200 lines.
-   - **No `*Utils` or `*Helper` types.** ADF conversion is a named core service (`AdfConverter`), and URL, base64, JSON Pointer and regex helpers are private methods at the bottom of their owner class. Small duplicates across the creators are acceptable.
+   - **No `*Utils` or `*Helper` types.** ADF conversion is a named client-support bean (`AdfConverter`), and URL, base64, JSON Pointer and regex helpers are private methods at the bottom of their owner class. Small duplicates across the creators are acceptable.
 7. **Outbound HTTP**: always through injected `RestUtils` beans (`README.md` › Outbound HTTP), so tests can `@InjectMock` them. Do not create other HTTP clients outside `JiraRestUtilsProducer`.
 8. **Logging**:
    - Use `org.jboss.logging.Logger`, as the copied classes do.
@@ -1082,7 +1083,7 @@ Rewrite the README for the Jira executor in the ServiceNow README's style (badge
    - Keep the Java base package `{base}` and `template.yaml` untouched. Only the Maven coordinates and names change.
    - Use Quarkus Qute (BOM-managed) with a `Map`/`List`/`String`-only data model (native-image safe), `strict-rendering=false` and `property-not-found-strategy=noop`.
    - Statelessness is mandatory: no database, no local persistence of issues or requests.
-   - The only change allowed in the template's client package is the copied `scope` fix in `AuthenticatedRestUtilsTemplate`.
+   - The only change allowed in the template's `utils.client` package is the copied `scope` fix in `AuthenticatedRestUtilsTemplate`.
    - No `jira.profiles.*` in the packaged `application.yml`.
 8. **Data constraints**:
    - `correlation.field` matches `customfield_\d+`.
@@ -1092,4 +1093,4 @@ Rewrite the README for the Jira executor in the ServiceNow README's style (badge
 9. **API constraints**:
    - `POST /api/v1/up/marketplace-executor/webhooks/jira/issue-events` takes `TicketEventCommandRes {correlationId, fields}` and returns `TicketEventResultRes {outcome, status, reason}` (nulls omitted), with `200` and `500` (and `400` only for malformed JSON).
    - `POST /api/v1/up/marketplace-executor/webhooks/jira/native-events` takes the native Jira webhook JSON object and returns the same response contract.
-   - `MarketplaceExecutorUseCaseResource` documents `202`, `400`, `409` and `500`.
+   - `MarketplaceExecutorUseCaseController` documents `202`, `400`, `409` and `500`.

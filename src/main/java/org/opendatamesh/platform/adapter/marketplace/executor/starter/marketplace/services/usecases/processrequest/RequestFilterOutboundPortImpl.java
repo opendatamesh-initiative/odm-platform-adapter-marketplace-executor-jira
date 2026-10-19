@@ -2,7 +2,7 @@ package org.opendatamesh.platform.adapter.marketplace.executor.starter.marketpla
 
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.domain.MarketplaceOperation;
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.domain.MarketplaceRequest;
-import org.opendatamesh.platform.adapter.marketplace.executor.starter.jira.services.core.RequestFilterService;
+import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.services.RequestFilterService;
 
 class RequestFilterOutboundPortImpl implements RequestFilterOutboundPort {
 

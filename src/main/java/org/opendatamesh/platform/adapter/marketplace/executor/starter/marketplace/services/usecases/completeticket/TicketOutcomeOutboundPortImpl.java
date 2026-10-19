@@ -2,7 +2,7 @@ package org.opendatamesh.platform.adapter.marketplace.executor.starter.marketpla
 
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.domain.MarketplaceOperation;
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.domain.TicketOutcome;
-import org.opendatamesh.platform.adapter.marketplace.executor.starter.jira.services.core.OutcomeRulesService;
+import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.services.OutcomeRulesService;
 
 import java.util.Map;
 import java.util.Optional;

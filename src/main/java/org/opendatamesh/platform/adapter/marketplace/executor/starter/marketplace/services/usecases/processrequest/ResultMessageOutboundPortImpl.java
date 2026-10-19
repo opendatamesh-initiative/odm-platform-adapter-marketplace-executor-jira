@@ -3,7 +3,7 @@ package org.opendatamesh.platform.adapter.marketplace.executor.starter.marketpla
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.domain.MarketplaceOperation;
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.domain.MarketplaceRequest;
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.domain.IssueReference;
-import org.opendatamesh.platform.adapter.marketplace.executor.starter.jira.services.core.ResultMessageService;
+import org.opendatamesh.platform.adapter.marketplace.executor.starter.client.jira.ResultMessageService;
 
 class ResultMessageOutboundPortImpl implements ResultMessageOutboundPort {
 

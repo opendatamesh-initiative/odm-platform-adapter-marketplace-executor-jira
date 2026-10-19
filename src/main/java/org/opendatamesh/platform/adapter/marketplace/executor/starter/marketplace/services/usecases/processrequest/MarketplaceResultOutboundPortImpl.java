@@ -1,7 +1,7 @@
 package org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.services.usecases.processrequest;
 
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.domain.MarketplaceResult;
-import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.services.core.MarketplaceServiceClient;
+import org.opendatamesh.platform.adapter.marketplace.executor.starter.client.marketplace.MarketplaceServiceClient;
 
 class MarketplaceResultOutboundPortImpl implements MarketplaceResultOutboundPort {
 

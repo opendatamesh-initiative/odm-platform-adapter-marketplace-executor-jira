@@ -6,7 +6,7 @@ This document describes how use cases are structured: REST surface, application 
 
 The flow is:
 
-**HTTP** → **JAX-RS resource** (`*UseCaseResource`) → **Use cases service** (`*UseCasesService`) → **Factory** (`*Factory`) → **Use case** (implements `UseCase`) → **Outbound ports** (interfaces) → **Adapters** (`*OutboundPortImpl`) → **Core / infrastructure** (CRUD services, clients, etc.).
+**HTTP** → **Controller** (`*UseCaseController`) → **Use cases service** (`*UseCasesService`) → **Factory** (`*Factory`) → **Use case** (implements `UseCase`) → **Outbound ports** (interfaces) → **Adapters** (`*OutboundPortImpl`) → **Core services / clients**.
 
 - The **use case** stays free of CDI and HTTP: it receives a **command** (domain input) and talks to the outside world only through **ports**.
 - The **presenter** is the use case’s output boundary: it receives domain results (e.g. `presentX(...)`).
@@ -15,15 +15,15 @@ The flow is:
 
 ### Hard boundaries (use case package)
 
-- **REST resources (`*CommandRes`, `*ResultRes`, and any `*Res`) MUST NOT** be referenced inside the use case package (`org.opendatamesh.platform.adapter.marketplace.executor.starter.<aggregate>.services.usecases.*`). They belong to the HTTP adapter; only the **use cases service** (and the JAX-RS resource) may use them. Do not put those types in a versioned `rest` package.
+- **REST resources (`*CommandRes`, `*ResultRes`, and any `*Res` under `rest.v<N>.resources`) MUST NOT** be referenced inside the use case package (`...services.usecases.*`). They belong to the HTTP adapter; only the **use cases service** (and controller) may use them.
 - **Commands** passed into the use case MUST carry **domain data only**: JPA **entities**, value types, or **small immutable records** you declare for denormalized input—never API DTOs.
 - **Presenters** MUST accept **domain results** (entities, domain records, or primitives)—not `*Res` types.
-- **Outbound port implementations** (`*OutboundPortImpl`) MUST be **plain Java classes** (no `@ApplicationScoped` or other CDI stereotypes). The **factory** is the only `@ApplicationScoped` bean in that slice: it constructs port impls with `new` and passes **injected collaborators** (core services, mappers, clients, `TransactionalOutboundPort`) into their constructors. Port interfaces stay free of framework types.
+- **Outbound port implementations** (`*OutboundPortImpl`) MUST be **plain Java classes** (no `@ApplicationScoped` or other CDI scopes). The **factory** is the only `@ApplicationScoped` bean in that slice: it constructs port impls with `new` and passes **CDI-injected collaborators** (core services, mappers, clients, `TransactionalOutboundPort`) into their constructors. Port interfaces stay free of framework types.
 
 ```mermaid
 flowchart LR
   subgraph rest [REST]
-    C[UseCaseResource]
+    C[UseCaseController]
     DTO[CommandRes / ResultRes]
   end
   subgraph app [Application]
@@ -48,69 +48,66 @@ flowchart LR
 
 ---
 
-## 1. Shared building blocks (`org.opendatamesh.platform.adapter.marketplace.executor.starter.utils.usecases`)
+## 1. Shared building blocks (`utils.usecases`)
 
 | Artifact                    | Role                                                                                                                                                                                                                  |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `UseCase`                   | Single method: `void execute()`. Every use case class implements this interface.                                                                                                                                      |
-| `UseCasePresenter`          | Shared presenter base. `presentException(OdmApiException)` rethrows that exception. `presentException(Exception)` wraps it in `InternalException`. A use-case presenter may extend this interface. |
-| `TransactionalOutboundPort` | Wraps work in a transaction (`doInTransaction`, `doInTransactionWithResults`). Injected into factories; implemented by `DefaultTransactionalOutboundPortImpl`.                                                      |
-
-`DefaultTransactionalOutboundPortImpl` is `@ApplicationScoped`. It runs the caller’s work with `QuarkusTransaction.joiningExisting()` and, as the first statement on the enlisted PostgreSQL connection, `SET TRANSACTION ISOLATION LEVEL SERIALIZABLE`.
+| `TransactionalOutboundPort` | Wraps work in a transaction (`doInTransaction`, `doInTransactionWithResults`). Injected into factories; implemented by `DefaultTransactionalOutboundPortImpl` (`QuarkusTransaction.joiningExisting()`, serializable isolation). |
 
 Use the transactional port inside the use case when the operation must be atomic (typical for persistence + side effects that belong in the same transaction).
 
 ---
 
-## 2. REST API: JAX-RS resource and DTOs
+## 2. REST API: controller and resources
 
-### JAX-RS resource
+### Controller
 
-- **Package:** adopting service, typically next to the aggregate. **Do not** use a versioned `rest` package (`rest.v1`, `rest.v2`) and **do not** put template utilities under `org.opendatamesh.platform.adapter.marketplace.executor.starter.rest`. Inbound HTTP helpers that the template ships live in `org.opendatamesh.platform.adapter.marketplace.executor.starter.utils.rest`.
-- **Class name:** `*UseCaseResource` (e.g. `DataProductUseCaseResource`).
-- **Annotations:** `@Path`, `@Produces(MediaType.APPLICATION_JSON)`.
+- **Package:** `rest.v<N>.controllers` (`<N>` = API major version).
+- **Class name:** `*UseCaseController` (e.g. `DataProductUseCaseController`).
+- **Annotations:** `@Path`, `@Produces(MediaType.APPLICATION_JSON)`. JAX-RS calls these "resource classes"; name them controllers anyway — "resource" is reserved for DTOs (`*Res`).
 - **Responsibility:** Map HTTP to the corresponding `*UseCasesService` method only. No business rules.
-- **OpenAPI:** `@Tag`, `@Operation`, `@ApiResponses`, `@Parameter` (`io.swagger.v3.oas.annotations`); use `@Schema(implementation = ...)` on responses where applicable. Use `@Hidden` for endpoints that should not appear in public API docs.
+- **OpenAPI:** `@Tag`, `@Operation`, `@ApiResponses`, `@Parameter`; use `@Schema(implementation = ...)` on responses where applicable. Use `@Hidden` for endpoints that should not appear in public API docs.
 
 ### Resources (DTOs)
 
-- **Package:** with the HTTP adapter (same aggregate, no version segment).
+- **Package:** `rest.v<N>.resources.<aggregate>.usecases.<verb>` (e.g. `...dataproduct.usecases.init`).
 - **Naming:**
   - Request body: `*CommandRes` (e.g. `DataProductInitCommandRes`).
   - Response body: `*ResultRes` when returning payload (e.g. `DataProductInitResultRes`).
 - **Content:** JavaBeans with getters/setters (and empty constructor for Jackson), fields documented with `@Schema` where useful.
-- **Mapping:** Convert between `*Res` and **domain entities** inside the use cases service—not inside the JAX-RS resource.
+- **Mapping:** Use the aggregate's mappers under `rest.v<N>.resources` (e.g. `DataProductMapper`) to convert between `*Res` and **domain entities** inside the use cases service—not inside the controller.
 
 ---
 
 ## 3. Use cases service (`*UseCasesService`)
 
-- **Package:** `org.opendatamesh.platform.adapter.marketplace.executor.starter.<aggregate>.services` (e.g. `org.opendatamesh.platform.adapter.marketplace.executor.starter.dataproduct.services`).
+- **Package:** `...<aggregate>.services` (e.g. `dataproduct.services`).
 - **Annotation:** `@ApplicationScoped`.
 - **Responsibility:**
-  1. Convert `*CommandRes` → domain **command** (record). This is the **only** layer that bridges `*Res` ↔ entities for the use case.
+  1. Convert `*CommandRes` → domain **command** (record) using mappers (`toEntity`, etc.). This is the **only** layer that bridges `*Res` ↔ entities for the use case.
   2. Build a **presenter** implementation:
-    - Often a **private static inner class** `*ResultHolder` that implements the presenter interface and stores the last `present*` argument for later `getResult()`.
-    - For void outcomes, a **lambda** implementing the presenter is acceptable when there is nothing to return (e.g. delete).
+  - Often a **private static inner class** `*ResultHolder` that implements the presenter interface and stores the last `present*` argument for later `getResult()`.
+  - For void outcomes, a **lambda** implementing the presenter is acceptable when there is nothing to return (e.g. delete).
   3. Call `factory.build...(command, presenter).execute()`.
   4. Map domain result to `*ResultRes` when needed.
 
-Keep this class as the single place that knows both REST mapping and use-case boundaries for that aggregate’s use cases.
+Keep this class as the single place that knows both REST mappers and use-case boundaries for that aggregate’s use cases.
 
 ---
 
 ## 4. Use case package layout
 
-For one behavioral slice (e.g. “initialize data product”), colocate under `org.opendatamesh.platform.adapter.marketplace.executor.starter.<aggregate>.services.usecases.<name>`:
+For one behavioral slice (e.g. “initialize data product”), colocate under `...services.usecases.<name>`:
 
-| File                     | Purpose                                                                                                                           |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `<Name>.java`            | Use case class: `class <Name> implements UseCase`, **package-private**.                                                           |
-| `<Name>Command.java`     | Input: **Java `record`** (or equivalent) holding **entities** and/or **declared domain records**—never `*Res` types.              |
-| `<Name>Presenter.java`   | Output boundary: methods use **domain types** only (e.g. `presentRegistered(Blueprint entity)`), not REST DTOs.                   |
+| File                     | Purpose                                                                                                                      |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `<Name>.java`            | Use case class: `class <Name> implements UseCase`, **package-private**.                                                      |
+| `<Name>Command.java`     | Input: **Java `record`** (or equivalent) holding **entities** and/or **declared domain records**—never `*Res` types.         |
+| `<Name>Presenter.java`   | Output boundary: methods use **domain types** only (e.g. `presentRegistered(Blueprint entity)`), not REST DTOs.              |
 | `<Name>Factory.java`     | **`@ApplicationScoped`** (sole CDI bean here); method `UseCase build...(Command, Presenter)`. Instantiates port impls with `new`. |
-| `*OutboundPort.java`     | Port interfaces (persistence, validation, notification, …). Domain-level method signatures.                                       |
-| `*OutboundPortImpl.java` | **Plain classes** (not CDI beans): implement ports; receive collaborators via constructor only.                                   |
+| `*OutboundPort.java`     | Port interfaces (persistence, validation, notification, …). Domain-level method signatures.                                  |
+| `*OutboundPortImpl.java` | **Plain classes** (not CDI beans): implement ports; receive collaborators via constructor only.                           |
 
 Optional: split ports by concern (`...PersistenceOutboundPort`, `...NotificationOutboundPort`, `...ValidationOutboundPort`, etc.).
 
@@ -120,9 +117,9 @@ Optional: split ports by concern (`...PersistenceOutboundPort`, `...Notification
 
 - Implements `UseCase` and implements `execute()`.
 - **Constructor** receives: command, presenter, outbound ports, and `TransactionalOutboundPort` when transactions are required.
-- **Visibility:** package-private (`class Foo implements UseCase`) so only the factory in the same package constructs it. Construct it with `new`.
-- **Logic:** The use case class must contain **all** of the business logic and **none** of the implementation-detail logic. Validate the command; orchestrate ports; call presenter methods when the business outcome is ready. Throw `OdmApiException` subtypes (`BadRequestException`, `NotFoundException`, `InternalException`) for invalid state.
-- **No** injection annotations on the use case class itself.
+- **Visibility:** package-private (`class Foo implements UseCase`) so only the factory in the same package constructs it.
+- **Logic:** The use case class must contain **all** of the business logic and **none** of the implementation-detail logic. Validate the command; orchestrate ports; call presenter methods when the business outcome is ready. Throw domain/API exceptions (`BadRequestException`, etc.) for invalid state.
+- **No** `@Inject` on the use case class itself.
 - **No** CDI annotations on the use case class itself.
 
 ### Business logic vs implementation detail
@@ -158,7 +155,7 @@ Method shape, line limit, and where helpers live are defined in [`CODE_STRUCTURE
 ## 7. Factories (`*Factory`)
 
 - **`@ApplicationScoped`** in the same package as the use case (the **only** `@ApplicationScoped` bean in that package).
-- **Inject** the beans needed to **construct** port implementations: core services (`*Service`, `*CrudService`), `TransactionalOutboundPort`, clients, and mappers between entities and `*Res` when ports need them.
+- **Inject** CDI beans needed to **construct** port implementations: core services (`*Service`, `*CrudService`), `TransactionalOutboundPort`, clients, and **mappers** (e.g. MapStruct) between entities and `*Res` when ports need them.
 - **Method signature:** `public UseCase build<Name>(<Name>Command command, <Name>Presenter presenter)`.
 - **Inside:** `new <Name>OutboundPortImpl(...)` for each port—**never** register port impls as CDI beans. Pass `new <Name>(command, presenter, ...ports, transactionalOutboundPort)`.
 
@@ -170,37 +167,40 @@ The factory is the only place that chooses concrete port implementations for tha
 
 - **Interface:** `<UseCase><Concern>OutboundPort` (e.g. `DataProductInitializerPersistenceOutboundPort`). Methods express what the use case needs in **domain terms** (`save(Blueprint)`, `validate(Blueprint)`, `emit...`)—not SQL, REST, or `*Res` types.
 - **Implementation:** `<UseCase><Concern>OutboundPortImpl` is a **plain Java class** (no `@ApplicationScoped`). It receives **constructor-injected** collaborators supplied by the factory (core `*Service`, mappers, clients). It may call:
-  - **Core layer** services (e.g. `DataProductsService`, `DescriptorVariableCrudService`), or
+  - **Core services** (e.g. `DataProductsService`, `DescriptorVariableCrudService`), or
   - **Clients** (e.g. `NotificationClient`), with entity ↔ `*Res` mapping **inside the impl** when the core API still uses resources.
 - **Visibility:** Port interfaces and their impls are often **package-private** so the boundary stays inside the use case package.
-- **Transactional port:** Shared across use cases; do not reimplement transaction handling inside each use case—delegate to `TransactionalOutboundPort`. `TransactionHandler` (`org.opendatamesh.platform.adapter.marketplace.executor.starter.utils.services`) stays the `REQUIRED` / `REQUIRES_NEW` bean for CRUD reads; use-case atomic work uses the port above.
-- **No CDI stereotypes on port impls:** If a concern needs to be testable in isolation, use plain `new` in unit tests or test the factory with mocked collaborators. Do not register the impl type as a bean.
+- **Transactional port:** Shared across use cases; do not reimplement transaction handling inside each use case—delegate to `TransactionalOutboundPort`.
+- **No CDI on port impls:** If a concern needs to be testable in isolation, use plain `new` in unit tests or test the factory with mocked collaborators—not `@InjectMock` on the impl type as a bean.
 - **Composed method:** Port impls and shared services they call follow [`CODE_STRUCTURE.md`](./CODE_STRUCTURE.md): a public/port method is a high-level sequence of named private steps. They own implementation detail; they must not leak those steps back into the use case, and they must not own business policy that belongs in the use case.
 
 ---
 
-## 9. Core services vs use case layer
+## 9. Core services, clients, and the use case layer
 
-- **`org.opendatamesh.platform.adapter.marketplace.executor.starter.<aggregate>.services.core.*`** (and similar): CRUD, queries, reusable domain operations. Use cases **do not** call these directly from the use case class; they go through outbound ports whose impls delegate to core services.
-- **`org.opendatamesh.platform.adapter.marketplace.executor.starter.utils.usecases`:** Cross-cutting use-case infrastructure (`UseCase`, `UseCasePresenter`, `TransactionalOutboundPort`).
+- **`...<aggregate>.services.core.*`:** core services — the **single entry point** to the entities the service owns (CRUD, queries, reusable domain operations). A service that owns no entities has no core package.
+- **Clients:** wrap an **outbound integration** with a system the service does not own (another service's API, a SaaS, a git provider, …). Where they live is up to the service, but never in a `core` package.
+- Collaborators that are neither (renderers, rule evaluators, mappers) are **not** clients: keep them with the core service, client, or adapter that owns them.
+- Use cases **do not** call core services or clients directly from the use case class; they go through outbound ports whose impls delegate to them.
+- **`utils.usecases`:** Cross-cutting use-case infrastructure (`UseCase`, `TransactionalOutboundPort`).
 
 ---
 
 ## 10. Testing
 
-- Add or extend **integration tests** for use case resources (e.g. `*UseCaseResourceIT`) to verify the full stack for the new endpoint.
+- Add or extend **integration tests** for use case controllers (e.g. `*UseCaseControllerIT` under `src/test/java/...rest.v<N>.controllers`) to verify the full stack for the new endpoint.
 - Unit-test complex port adapters or use case logic where it pays off (existing project uses tests such as `*OutboundPortTest` in some areas).
 
 ---
 
 ## 11. Checklist for a new use case
 
-1. Define **command** record (domain only) and **presenter** interface (domain arguments only) in `org.opendatamesh.platform.adapter.marketplace.executor.starter.<aggregate>.services.usecases.<name>`.
+1. Define **command** record (domain only) and **presenter** interface (domain arguments only) in `...services.usecases.<name>`.
 2. Define **outbound port** interfaces and **plain `*OutboundPortImpl` classes** (no CDI annotations). Implement validation/persistence/etc. with collaborators passed from the factory.
-3. Add **`@ApplicationScoped` factory** only: construct port impls and the use case with `new`, inject `TransactionalOutboundPort` and core services/mappers.
+3. Add **`@ApplicationScoped` factory** only: construct port impls with `new`, inject `TransactionalOutboundPort` and core services/mappers.
 4. Add **`*UseCasesService`** methods (or extend an existing one): map `*CommandRes` → entity/command, run factory + `execute()`, map domain result from presenter to `*ResultRes`.
-5. Add **`*CommandRes` / `*ResultRes`** next to the HTTP adapter (no versioned `rest` package) with OpenAPI `@Schema` as needed.
-6. Add the **`@Path` JAX-RS resource** endpoint calling the use cases service; document with OpenAPI.
-7. Add an **integration test** for the new route.
+5. Add **`*CommandRes` / `*ResultRes`** under `rest.v<N>.resources.<aggregate>.usecases.<verb>` with OpenAPI `@Schema` as needed.
+6. Add the **`@Path` controller** endpoint calling the use cases service; document with OpenAPI.
+7. Add **integration test** for the new route.
 
 Following these steps keeps new behavior consistent with the existing hexagonal-style layout: **ports/adapters** for infrastructure, **use case** for orchestration, **REST** as a thin adapter on top of the use cases service.

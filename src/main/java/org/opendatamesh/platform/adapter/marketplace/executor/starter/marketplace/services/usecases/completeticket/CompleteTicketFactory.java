@@ -1,10 +1,10 @@
 package org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.services.usecases.completeticket;
 
-import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.services.core.MarketplaceServiceClient;
-import org.opendatamesh.platform.adapter.marketplace.executor.starter.jira.services.core.JiraIssueService;
-import org.opendatamesh.platform.adapter.marketplace.executor.starter.jira.services.core.OutcomeRulesService;
-import org.opendatamesh.platform.adapter.marketplace.executor.starter.jira.services.core.RequestFilterService;
-import org.opendatamesh.platform.adapter.marketplace.executor.starter.jira.services.core.ResultMessageService;
+import org.opendatamesh.platform.adapter.marketplace.executor.starter.client.marketplace.MarketplaceServiceClient;
+import org.opendatamesh.platform.adapter.marketplace.executor.starter.client.jira.JiraIssueService;
+import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.services.OutcomeRulesService;
+import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.services.RequestFilterService;
+import org.opendatamesh.platform.adapter.marketplace.executor.starter.client.jira.ResultMessageService;
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.utils.usecases.UseCase;
 import jakarta.enterprise.context.ApplicationScoped;
 

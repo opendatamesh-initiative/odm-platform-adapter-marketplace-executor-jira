@@ -1,6 +1,6 @@
 package org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.services.usecases.processrequest;
 
-import org.opendatamesh.platform.adapter.marketplace.executor.starter.jira.services.core.JiraIssueService;
+import org.opendatamesh.platform.adapter.marketplace.executor.starter.client.jira.JiraIssueService;
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.domain.IssueReference;
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.domain.MarketplaceOperation;
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.domain.MarketplaceRequest;

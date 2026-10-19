@@ -4,7 +4,7 @@ import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplac
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.domain.MarketplaceRequest;
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.domain.MarketplaceRequestStatus;
 import org.opendatamesh.platform.adapter.marketplace.executor.starter.marketplace.domain.TicketOutcome;
-import org.opendatamesh.platform.adapter.marketplace.executor.starter.jira.services.core.ResultMessageService;
+import org.opendatamesh.platform.adapter.marketplace.executor.starter.client.jira.ResultMessageService;
 
 import java.util.Map;
 
