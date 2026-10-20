@@ -6,7 +6,7 @@
 
     <groupId>org.opendatamesh</groupId>
     <artifactId>odm-platform-adapter-marketplace-executor-jira</artifactId>
-    <version>1.0.2-SNAPSHOT</version>
+    <version>1.0.0</version>
     <name>ODM Platform Adapter Marketplace Executor Jira</name>
     <description>ODM Marketplace Executor that fulfils access requests through Jira issues and Jira Service Management requests</description>
 
