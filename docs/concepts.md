@@ -183,7 +183,7 @@ Request headers, tokens, secrets, webhook URLs and request or native payload bod
 
 ## Security model
 
-The notification endpoints have **no authentication of their own**. Put them behind an authenticating gateway or reverse proxy that authenticates Jira and forwards only the webhook paths. The executor must be reachable only by the Marketplace Service and by that gateway. Native Jira webhooks always need a signature-verifying gateway, because the executor does not verify `X-Hub-Signature`. See [Provisioning](provisioning.md#securing-the-notification-endpoints).
+The notification endpoints have **no authentication of their own**. Put them behind an authenticating gateway or reverse proxy that authenticates Jira and forwards only the webhook paths. The executor must be reachable only by the Marketplace Service and by that gateway. Native Jira webhooks always need a signature-verifying gateway, because the executor does not verify `X-Hub-Signature`. See [Provisioning](jira-setup.md#8-securing-the-notification-endpoints).
 
 ## Limits and roadmap
 

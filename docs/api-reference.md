@@ -4,7 +4,7 @@
 
 ## Overview
 
-The executor exposes three HTTP endpoints. One is called by the Marketplace Service to hand over a request; the other two are called by Jira (through an authenticating gateway, see [Securing the notification endpoints](provisioning.md#securing-the-notification-endpoints)) to say that an issue has changed. The executor in turn calls the Marketplace Service to report results.
+The executor exposes three HTTP endpoints. One is called by the Marketplace Service to hand over a request; the other two are called by Jira (through an authenticating gateway, see [Securing the notification endpoints](jira-setup.md#8-securing-the-notification-endpoints)) to say that an issue has changed. The executor in turn calls the Marketplace Service to report results.
 
 Swagger UI is at `http://localhost:9019/swagger-ui` and the OpenAPI document at `http://localhost:9019/api-docs`.
 

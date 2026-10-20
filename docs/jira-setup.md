@@ -4,19 +4,32 @@
 
 ## Overview
 
-Before the executor can work, a Jira administrator has to prepare a few things in Jira: an account the executor logs in with, a custom field to remember which marketplace request an issue belongs to, the project (or service desk) where issues are created, and a way for Jira to tell the executor when an issue is completed.
+For the executor to work, Jira must be prepared in two directions:
 
-In short:
+1. **Jira lets the executor in.** A dedicated integration identity (a service account, API token or Personal Access Token), permission to create the issues, and the custom field that ties an issue to a marketplace request.
+2. **Jira calls the executor back.** When an issue is completed, an Automation rule (or a native webhook) sends a small JSON message so the marketplace learns the outcome. That message goes through an **authenticating gateway**, which checks who is calling.
 
-1. Create the integration identity and give it the right permissions.
-2. Create one text custom field (the "correlation field") and put it on the right screens.
-3. Prepare the project (issue type) or the service project (request type) that receives the requests.
-4. Make sure the workflow sets a **resolution** when an issue is closed, and that statuses and resolutions match the executor's outcome rules ([what a resolution is](#what-a-resolution-is)).
-5. Set up **one** completion channel: an Automation rule (recommended) or a native webhook.
+This page covers the steps shared by every Jira practice. The settings that depend on the practice (issue types, request types, Automation incoming webhooks) are in the [use cases](use-cases.md).
 
-Related: [Use cases](use-cases.md) · [Provisioning](provisioning.md) · [Configuration reference](configuration-reference.md) · [Troubleshooting](troubleshooting.md)
+**Prerequisites:** Jira Cloud, or Jira Data Center 8.14 or later, and an **authenticating gateway** to authenticate the notification endpoints (see [Securing the notification endpoints](#8-securing-the-notification-endpoints)).
 
 Items marked "verify on your instance" depend on the Atlassian release; check them before relying on them.
+
+## Contents
+
+1. [Integration identity](#1-integration-identity)
+2. [Permissions](#2-permissions)
+3. [The correlation custom field](#3-the-correlation-custom-field)
+4. [Project and issue type (interface `ISSUE`)](#4-project-and-issue-type-interface-issue)
+5. [Service project and request types (interface `SERVICE_DESK_REQUEST`)](#5-service-project-and-request-types-interface-service_desk_request)
+6. [Statuses, resolutions and workflow](#6-statuses-resolutions-and-workflow)
+7. [Automation incoming webhook (interface `AUTOMATION_WEBHOOK` only)](#7-automation-incoming-webhook-interface-automation_webhook-only)
+8. [Securing the notification endpoints](#8-securing-the-notification-endpoints)
+9. [Completion channel A - Jira Automation rule (recommended)](#9-completion-channel-a---jira-automation-rule-recommended)
+10. [Completion channel B - native webhook](#10-completion-channel-b---native-webhook)
+11. [Rotating secrets](#rotating-secrets)
+
+Related: [Use cases](use-cases.md) · [Provisioning](provisioning.md) · [Configuration reference](configuration-reference.md) · [Troubleshooting](troubleshooting.md)
 
 ## 1. Integration identity
 
@@ -153,9 +166,127 @@ Subscribe and unsubscribe can share a project and workflow or use different ones
 
 For each operation create an Automation rule with the trigger *Incoming webhook*, and an action *Create issue* that sets the correlation field to `{{webhookData.correlationId}}`. Copy the generated URL and secret into `webhook-url` and `webhook-token`. Details and the body are in [Use case 3](use-cases.md#use-case-3---jira-automation-incoming-webhook).
 
-## 8. Completion channel A - Jira Automation rule (recommended)
+## 8. Securing the notification endpoints
 
-A rule calls the executor, through your authenticating gateway (see [Securing the notification endpoints](provisioning.md#securing-the-notification-endpoints)), when the issue is completed. One rule per project (or one for several).
+The two notification endpoints (`.../webhooks/jira/issue-events` and `.../webhooks/jira/native-events`) have **no authentication of their own**: anyone who can reach them can forge a final result for a request. They must therefore never be exposed to Jira or the internet directly. Put an authenticating gateway or reverse proxy in front of them, with these properties:
+
+- It authenticates Jira (or the component that relays Jira's calls).
+- It forwards **only** the two webhook paths. In particular `POST .../requests` must not be reachable through it, because it would let a caller inject access requests bypassing the Marketplace Service.
+- The executor is reachable only by the Marketplace Service and by this gateway (network policy or firewall).
+- For **native Jira webhooks**, the gateway also verifies the `X-Hub-Signature` HMAC, because the executor does not.
+
+Choose one of the options below.
+
+### Option A: your own authenticating gateway
+
+Any API gateway, reverse proxy or small function works. Authenticate the caller with whatever fits your environment (API key, bearer token, mTLS, IP allow-list combined with a secret), allow-list the two webhook paths and forward to the executor.
+
+- **Jira Automation rule** (channel A): the rule can send a fixed secret header (marked *Hidden*) that the gateway checks. See [section 9](#9-completion-channel-a---jira-automation-rule-recommended).
+- **Native webhook** (channel B): Jira can only sign the call. The gateway verifies the signature, adds the credentials expected by your gateway or upstream and forwards. A reference sketch and a security checklist are in [section 10](#10-completion-channel-b---native-webhook).
+- Never log headers, bodies or tokens, and keep the gateway's secrets in a secret store.
+
+### Option B: blindata-agent
+
+blindata-agent is a ready-made option. Its ODM proxy authenticates and authorizes the notification endpoints, so the executor needs no changes. Native webhooks still need the signature-verifying gateway of option A in front of it.
+
+1. **Register the executor in the ODM proxy configuration.** Add the executor's base URL to `servicesURLs`, with a key of the form `marketplace-executor-<suffix>`, for example `marketplace-executor-jira`:
+
+```json
+{
+  "servicesURLs": {
+    "marketplace-executor-jira": "http://marketplace-executor-jira.internal:9019"
+  }
+}
+```
+
+The key is a contract: it is the `servicesURLs` key, the `{service}` segment of the proxy URL, and it selects the agent's generic marketplace-executor authorization filter. Any family name works as long as it starts with `marketplace-executor`. The agent forwards `/agent-api/v1/odm/proxy/{configUuid}/{service}/**` to that base URL, keeping the rest of the path and the query string.
+
+2. **The URLs Jira (or your gateway) calls:**
+
+```
+https://<agent-host>/agent-api/v1/odm/proxy/<configUuid>/marketplace-executor-jira/api/v1/up/marketplace-executor/webhooks/jira/issue-events
+https://<agent-host>/agent-api/v1/odm/proxy/<configUuid>/marketplace-executor-jira/api/v1/up/marketplace-executor/webhooks/jira/native-events
+```
+
+`<configUuid>` is the identifier of the ODM proxy configuration in the Blindata platform.
+
+3. **A dedicated Blindata identity.** Create an identity for Jira with the **`MARKETPLACE_EDITOR`** permission and nothing else, and authenticate it with an API key or with OAuth 2.0 (for example Microsoft Entra ID). See [Authenticating to Blindata](#authenticating-to-blindata).
+
+4. **Authorization.** The agent's generic `marketplace-executor` filter allows a caller with `MARKETPLACE_EDITOR` to **`POST` only inside the executors' webhooks namespace `.../api/v1/up/marketplace-executor/webhooks/**`**, which holds both Jira endpoints. Every other method and path of the executor, notably `POST .../requests` (which would let a caller inject access requests bypassing the Marketplace Service), is answered with `403`. **Never use `DATAOPS_ADMIN` for the Jira identity**: it bypasses the filter and can reach every executor path. The filter is delivered with the agent and must be released together with this executor. The agent needs no Jira-specific code.
+
+5. **Smoke test through the agent** (harmless: an unknown UUID is acknowledged and ignored):
+
+```bash
+curl -i -X POST "https://<agent-host>/agent-api/v1/odm/proxy/<configUuid>/marketplace-executor-jira/api/v1/up/marketplace-executor/webhooks/jira/issue-events" \
+  -H "Content-Type: application/json" \
+  -H "X-BD-User: <application user>" -H "X-BD-ApiKey: <api key>" \
+  -d '{"correlationId":"00000000-0000-0000-0000-000000000000","fields":{"statusCategory":"done"}}'
+# -> 200 {"outcome":"IGNORED","reason":"UNKNOWN_REQUEST"}
+```
+
+A `403` means the application user lacks `MARKETPLACE_EDITOR`, or the route points to a different service key.
+
+### Authenticating to Blindata
+
+Every call to the agent must identify a Blindata user. The agent has no user store of its own: it passes the credentials to the Blindata platform, which returns the user's permissions. The caller must also send the `X-BD-Tenant` header with the tenant it acts on. Two methods are available.
+
+| Method | Headers the caller sends | Fits |
+|:--|:--|:--|
+| API key | `X-BD-User`, `X-BD-ApiKey`, `X-BD-Tenant` | Jira Automation rule (channel A), or a gateway |
+| OAuth 2.0 (Microsoft Entra ID) | `Authorization: Bearer <access token>`, `X-BD-Tenant` | A gateway or integration component that can obtain tokens |
+
+#### API key
+
+1. In Blindata, create an **application user** for Jira and grant it only the **`MARKETPLACE_EDITOR`** permission. Generate its API key and keep it in a secret store.
+2. In the Jira Automation rule (see [section 9](#9-completion-channel-a---jira-automation-rule-recommended)), set these headers on the *Send web request* action, marking the key and the user **Hidden**:
+
+| Header | Value |
+|:--|:--|
+| `X-BD-User` | the application user name |
+| `X-BD-ApiKey` | the API key |
+| `X-BD-Tenant` | the Blindata tenant |
+
+The agent exchanges the user and API key for a Blindata access token on each call, so a revoked key stops working immediately. API keys do not refresh themselves: rotate them according to your security policy and update the rule's header.
+
+#### OAuth 2.0 with Microsoft Entra ID
+
+Blindata accepts access tokens issued by Microsoft Entra ID as bearer tokens, including tokens of an application (service principal) obtained with the client credentials flow. The token never carries Blindata permissions: they come from the Blindata user it maps to.
+
+1. **Register an application in Entra ID** for the Jira integration and create a client credential for it (a certificate is preferable to a client secret). Note the application's object id (`oid`) and the Directory (tenant) id (`tid`).
+2. **Request tokens with the audience Blindata is configured for.** Blindata accepts only tokens with exactly one audience, matching the Azure provider configured for your tenant. Ask your Blindata administrator for the value, and request the matching scope (typically `api://<application-id>/.default`).
+3. **Enable the Azure provider for the tenant** in Blindata, and create a Blindata user whose name is `msazure:<oid>@<tid>` for the application, with only the **`MARKETPLACE_EDITOR`** permission. A token whose application has no such user is rejected with `401`.
+4. **Call the agent** with the token:
+
+```bash
+TOKEN=$(curl -s -X POST "https://login.microsoftonline.com/<tid>/oauth2/v2.0/token" \
+  -d grant_type=client_credentials \
+  -d client_id="$ENTRA_CLIENT_ID" \
+  -d client_secret="$ENTRA_CLIENT_SECRET" \
+  -d scope="api://<application-id>/.default" | jq -r .access_token)
+
+curl -i -X POST "https://<agent-host>/agent-api/v1/odm/proxy/<configUuid>/marketplace-executor-jira/api/v1/up/marketplace-executor/webhooks/jira/issue-events" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" -H "X-BD-Tenant: <tenant>" \
+  -d '{"correlationId":"00000000-0000-0000-0000-000000000000","fields":{"statusCategory":"done"}}'
+# -> 200 {"outcome":"IGNORED","reason":"UNKNOWN_REQUEST"}
+```
+
+Notes:
+
+- **Jira cannot obtain tokens.** A Jira Automation rule can send only fixed headers, and Entra tokens expire (about an hour). The component that calls the agent (a gateway, an Azure Logic App or a function) must request and renew the token, then forward the Jira event with the `Authorization` header.
+- **Token lifetime.** Request a new token when the current one expires. A `401` after a period of correct behaviour usually means an expired token or an expired client credential.
+- **One identity per integration.** Use a separate Entra application, and a separate Blindata user, for each integration, so that one can be revoked without affecting the others.
+- Verify on your instance: the audience value, the scope and the Azure provider settings depend on how your Blindata tenant is configured.
+
+#### Which method to choose
+
+- Use an **API key** when Jira calls the agent directly from an Automation rule: it is the only method a rule can use without extra components.
+- Use **OAuth 2.0** when your organisation requires short-lived credentials or centrally managed identities in Entra ID, and a gateway or integration component already sits between Jira and the agent.
+- In both cases, grant the identity **`MARKETPLACE_EDITOR`** only, and never `DATAOPS_ADMIN`.
+
+## 9. Completion channel A - Jira Automation rule (recommended)
+
+A rule calls the executor, through your authenticating gateway (see [Securing the notification endpoints](#8-securing-the-notification-endpoints)), when the issue is completed. One rule per project (or one for several).
 
 1. **Trigger**: *Issue transitioned*. Add a condition *Issue fields condition / status category = Done*, scoped to the projects of your profiles. Add a *JQL condition* `"<field name>" is not EMPTY` so that only marketplace issues call the executor.
 2. **Action**: *Send web request*.
@@ -188,11 +319,12 @@ Verify on your instance: check `{{issue.status.statusCategory.key}}`, `{{initiat
 
 Notes:
 
+- When the rule calls the Blindata agent directly, send the API key headers described in [Authenticating to Blindata](#authenticating-to-blindata). For OAuth 2.0 (Entra ID), a component that obtains the token must sit between Jira and the agent.
 - Automation rules consume your plan's **automation usage** limits. Check them for the expected volume.
 - Automation waits for the web request answer for a limited time (about 30 s: verify on your instance) and does **not retry**. A `500` from the executor is visible only in the rule's **audit log**: fix the cause and re-run the rule for that issue.
 - The gateway must be a **permitted target** of the web request: on Cloud, expose it over TLS and allow-list the Atlassian egress IPs on your edge, since the gateway is usually inside your network.
 
-## 9. Completion channel B - native webhook
+## 10. Completion channel B - native webhook
 
 Use this when you prefer not to maintain an Automation rule. **It requires a customer-provided signature-verifying gateway**, because Jira signs the call but cannot send the credentials your auth gateway or upstream expects.
 
@@ -239,6 +371,15 @@ Security checklist for the gateway:
 
 > **Choose one channel per project.** Using both for the same project only produces duplicate notifications, which the executor tolerates (first final status wins) but which are noise.
 
+## Rotating secrets
+
+- *OAuth service account*: create or regenerate the client secret, update `JIRA_CLIENT_SECRET` and restart the executor. Tokens already issued are cached until their expiry.
+- *API token* (Cloud): create the new token before the old one expires (at most 365 days), update `JIRA_API_TOKEN`, restart the executor, then revoke the old token.
+- *Personal Access Token* (Data Center): create the new token, update `JIRA_PAT`, restart, then revoke the old one.
+- *Automation webhook token*: regenerate it in the rule and update the `webhook-token` source.
+- Between the rotation and the restart, issue creation fails with an `ERROR` message that names an authentication failure.
+- The credentials Jira uses towards your gateway are rotated on the gateway side and in the Automation rule's hidden header (or in the signature-verifying gateway's secret store). The Blindata API key of [Authenticating to Blindata](#authenticating-to-blindata) is rotated in Blindata and in the rule's header together.
+
 ## Checklist
 
 - [ ] Integration identity created, credentials in the secret store
@@ -246,4 +387,9 @@ Security checklist for the gateway:
 - [ ] Correlation field created and on the create/edit screens or request type
 - [ ] Project and issue type, or service project and request types, ready
 - [ ] Resolutions and workflow checked against the outcome rules
-- [ ] One completion channel configured and tested (see the [smoke test](provisioning.md#verifying-the-installation))
+- [ ] Notification endpoints secured (gateway or blindata-agent) and the smoke test passes
+- [ ] One completion channel configured and tested (see the [smoke test](provisioning.md#verify))
+
+---
+
+[Back to README](../README.md) | [Use cases](use-cases.md) | [Provisioning](provisioning.md)

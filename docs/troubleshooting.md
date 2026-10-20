@@ -48,7 +48,7 @@ The final status only ever comes from a completion notification. Check in this o
 
 1. **Is the correlation field set?** Open the issue: the *Marketplace request id* must hold the UUID. If it is empty, check that the field is on the create screen or the request type (or use `correlation-via-edit`), and, for the Automation kind, that the creation rule copies `{{webhookData.correlationId}}` into it.
 2. **Did the Automation rule or the webhook fire?** Check the rule's **audit log** (Automation does not retry), or the webhook's delivery log. If the native webhook never arrives, check the Webhook Auth Gateway (signature failures, wrong URL).
-3. **Did the gateway accept the call?** `401` or `403` come from your gateway: check the credentials Jira sends and the route or path allow-list. Run the [smoke test](provisioning.md#verifying-the-installation).
+3. **Did the gateway accept the call?** `401` or `403` come from your gateway: check the credentials Jira sends and the route or path allow-list. Run the [smoke test](provisioning.md#verify).
 4. **What did the executor answer?** Look for `ignored: <REASON>` in the executor log:
    - `NOT_A_STATUS_TRANSITION`: the native webhook fired for an edit, not a transition (expected for most events);
    - `MISSING_CORRELATION`: the correlation field was not read back (wrong smart value in the rule, or a wrong `jira.correlation.field`);

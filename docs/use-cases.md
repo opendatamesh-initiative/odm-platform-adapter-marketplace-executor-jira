@@ -25,7 +25,7 @@ The examples use:
 - site `https://acme.atlassian.net` on **Cloud**, a service account with OAuth client credentials from the environment, API URL `https://api.atlassian.com/ex/jira/<cloudId>`, REST v2, and a filter that handles the `urn:dp:finance:*` data products;
 - the correlation field `customfield_10050` (named *Marketplace request id*);
 - the global message defaults from [Templates](templates.md#messages) (omit the `messages` block to keep them);
-- the completion Automation rule body from [Jira setup, channel A](jira-setup.md#8-completion-channel-a---jira-automation-rule-recommended).
+- the completion Automation rule body from [Jira setup, channel A](jira-setup.md#9-completion-channel-a---jira-automation-rule-recommended).
 
 Where to put the YAML: an external `config/application.yml`, see [Configuration reference](configuration-reference.md#where-to-put-the-configuration).
 
@@ -134,7 +134,7 @@ Optional additions under a profile:
 - `object-fields: {priority: {name: "High"}}` and `list-fields: {labels: ["marketplace"]}`.
 - `jira.correlation.label: true`: also add the label `bdmp-<uuid>` (handy for JQL searches).
 
-**Completion.** An Automation rule *Issue transitioned* in project `ACC` with the condition *status category = Done* and the JQL condition `"Marketplace request id" is not EMPTY`, plus the *Send web request* action ([channel A](jira-setup.md#8-completion-channel-a---jira-automation-rule-recommended)). Native-webhook variant: a `jira:issue_updated` webhook with the JQL `project = ACC AND "Marketplace request id" is not EMPTY`, through the [gateway](jira-setup.md#9-completion-channel-b---native-webhook), to `.../webhooks/jira/native-events`. No profile changes are needed: the outcome rules read the same normalised fields.
+**Completion.** An Automation rule *Issue transitioned* in project `ACC` with the condition *status category = Done* and the JQL condition `"Marketplace request id" is not EMPTY`, plus the *Send web request* action ([channel A](jira-setup.md#9-completion-channel-a---jira-automation-rule-recommended)). Native-webhook variant: a `jira:issue_updated` webhook with the JQL `project = ACC AND "Marketplace request id" is not EMPTY`, through the [gateway](jira-setup.md#10-completion-channel-b---native-webhook), to `.../webhooks/jira/native-events`. No profile changes are needed: the outcome rules read the same normalised fields.
 
 **Example run**
 
@@ -281,7 +281,7 @@ jira:
           outcome: FAILED
 ```
 
-**Completion.** An Automation rule *Issue transitioned* on the service project, condition *status category = Done* **or** *status = Declined* (so declined approvals are reported too), JQL condition `"Marketplace request id" is not EMPTY`, and the *Send web request* action from [channel A](jira-setup.md#8-completion-channel-a---jira-automation-rule-recommended). Native-webhook variant: a `jira:issue_updated` webhook with the JQL `project = SD AND "Marketplace request id" is not EMPTY`, through the [gateway](jira-setup.md#9-completion-channel-b---native-webhook).
+**Completion.** An Automation rule *Issue transitioned* on the service project, condition *status category = Done* **or** *status = Declined* (so declined approvals are reported too), JQL condition `"Marketplace request id" is not EMPTY`, and the *Send web request* action from [channel A](jira-setup.md#9-completion-channel-a---jira-automation-rule-recommended). Native-webhook variant: a `jira:issue_updated` webhook with the JQL `project = SD AND "Marketplace request id" is not EMPTY`, through the [gateway](jira-setup.md#10-completion-channel-b---native-webhook).
 
 **Example run**
 
@@ -372,7 +372,7 @@ The webhook URLs and tokens are secrets: provide them only through the environme
 
 The smart-value paths follow the webhook body; check them in the rule audit log. The `request` object carries the full request data, for example `{{webhookData.request.provider.dataProductFqn}}`.
 
-**Completion.** The Automation rule or native webhook of [channel A or B](jira-setup.md#8-completion-channel-a---jira-automation-rule-recommended), scoped to the project where the rule creates the issues. The executor never learns the issue key, so the `PENDING` message says the request was submitted to the Jira Automation rule, and the final message carries the key sent by the completion notification.
+**Completion.** The Automation rule or native webhook of [channel A or B](jira-setup.md#9-completion-channel-a---jira-automation-rule-recommended), scoped to the project where the rule creates the issues. The executor never learns the issue key, so the `PENDING` message says the request was submitted to the Jira Automation rule, and the final message carries the key sent by the completion notification.
 
 **Example run**
 
@@ -450,4 +450,4 @@ jira:
     provider-data-product-fqns: ['(?!urn:dp:finance:).*']
 ```
 
-A request that no executor accepts is rejected by the Marketplace Service at submission with "No executor was able to handle the request". Every non-matching executor answers `409`, which the Marketplace Service may log: that is expected. Give each executor its own route or key in your gateway configuration (for example `marketplace-executor-jira-finance`), see [Provisioning](provisioning.md#securing-the-notification-endpoints). Filter semantics are in [Configuration reference](configuration-reference.md#request-filter).
+A request that no executor accepts is rejected by the Marketplace Service at submission with "No executor was able to handle the request". Every non-matching executor answers `409`, which the Marketplace Service may log: that is expected. Give each executor its own route or key in your gateway configuration (for example `marketplace-executor-jira-finance`), see [Provisioning](jira-setup.md#8-securing-the-notification-endpoints). Filter semantics are in [Configuration reference](configuration-reference.md#request-filter).
