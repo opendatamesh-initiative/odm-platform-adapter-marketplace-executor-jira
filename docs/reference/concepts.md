@@ -1,6 +1,6 @@
 # Concepts
 
-[Back to README](../README.md)
+[Back to README](../../README.md)
 
 ## Overview
 
@@ -8,7 +8,7 @@ When someone asks the marketplace for access to a data product, a person has to 
 
 The executor has no database. Everything it needs is either in the marketplace request (held by the Marketplace Service) or in a custom field on the Jira issue that stores the request UUID.
 
-Related: [Use cases](use-cases.md) · [Jira setup](jira-setup.md) · [Configuration reference](configuration-reference.md)
+Related: [Scenarios](../../README.md#1-pick-your-scenario) · [Jira setup](jira-setup.md) · [Configuration reference](configuration-reference.md)
 
 ## Architecture
 

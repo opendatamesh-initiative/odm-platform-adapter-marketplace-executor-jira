@@ -1,12 +1,12 @@
 # Troubleshooting
 
-[Back to README](../README.md)
+[Back to README](../../README.md)
 
 ## Overview
 
 Most problems fall into three groups: the executor does not start (configuration), an issue is not created (Jira side), or the request stays `PENDING` after the issue is completed (the completion notification did not arrive or was ignored). This page tells you where to look for each.
 
-Related: [Provisioning](provisioning.md) · [Jira setup](jira-setup.md) · [Configuration reference](configuration-reference.md) · [API reference](api-reference.md)
+Related: [Build and run](build-and-run.md) · [Jira setup](jira-setup.md) · [Configuration reference](configuration-reference.md) · [API reference](api-reference.md)
 
 ## Logs
 
@@ -48,7 +48,7 @@ The final status only ever comes from a completion notification. Check in this o
 
 1. **Is the correlation field set?** Open the issue: the *Marketplace request id* must hold the UUID. If it is empty, check that the field is on the create screen or the request type (or use `correlation-via-edit`), and, for the Automation kind, that the creation rule copies `{{webhookData.correlationId}}` into it.
 2. **Did the Automation rule or the webhook fire?** Check the rule's **audit log** (Automation does not retry), or the webhook's delivery log. If the native webhook never arrives, check the Webhook Auth Gateway (signature failures, wrong URL).
-3. **Did the gateway accept the call?** `401` or `403` come from your gateway: check the credentials Jira sends and the route or path allow-list. Run the [smoke test](provisioning.md#verify).
+3. **Did the gateway accept the call?** `401` or `403` come from your gateway: check the credentials Jira sends and the route or path allow-list. Run the [smoke test](build-and-run.md#verify).
 4. **What did the executor answer?** Look for `ignored: <REASON>` in the executor log:
    - `NOT_A_STATUS_TRANSITION`: the native webhook fired for an edit, not a transition (expected for most events);
    - `MISSING_CORRELATION`: the correlation field was not read back (wrong smart value in the rule, or a wrong `jira.correlation.field`);
@@ -61,6 +61,6 @@ The final status only ever comes from a completion notification. Check in this o
 ## Other situations
 
 - **Unexpected result message or missing text.** Missing template values render empty by design. Check the data model in [Templates](templates.md#data-model). A message that must not contain the Jira user: see [Privacy](concepts.md#privacy).
-- **Two executors both report.** Filters are not exclusive: see [Use case 5](use-cases.md#use-case-5---several-executors-behind-one-marketplace).
+- **Two executors both report.** Filters are not exclusive: see [Several executors](examples.md#several-executors-behind-one-marketplace).
 - **Unsubscribe while the subscribe issue is still open.** Two issues exist at the same time. The executor does not resolve this: handle it in your Jira process.
 - **Duplicate notifications.** Both completion channels are active for the same project. Keep one.

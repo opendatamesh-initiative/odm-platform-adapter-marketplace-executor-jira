@@ -1,12 +1,12 @@
-# Provisioning
+# Build, run locally and release
 
-[Back to README](../README.md)
+[Back to README](../../README.md)
 
 ## Overview
 
 This page explains how to build the executor, run it (as a Java process or as a Docker container), connect it to the rest of the platform and check that it works. The executor is a standard Quarkus service: one process, no database, port 9019. It needs to reach Jira and the Marketplace Service, and it must be reachable by the Marketplace Service and by the gateway that authenticates Jira ([Securing the notification endpoints](jira-setup.md#8-securing-the-notification-endpoints)).
 
-The easiest way to run it is the ready-made Docker image, published for every release on GitHub Container Registry and Docker Hub ([Run with Docker](#run-with-docker)). The repository does not ship a Helm chart or Kubernetes manifests; the [Deploy](#deploy) section lists what a container needs. Images are built and published by GitHub Actions ([CI/CD and releases](#cicd-and-releases)).
+The easiest way to run it is the ready-made Docker image, published for every release on GitHub Container Registry and Docker Hub ([Run with Docker](#run-with-docker)). The repository does not ship a Helm chart or Kubernetes manifests; [Deployment](deployment.md#containers-and-kubernetes) lists what a container needs, and the [platform quickstarts](../../README.md#2-pick-your-platform) deploy it on serverless platforms. Images are built and published by GitHub Actions ([CI/CD and releases](#cicd-and-releases)).
 
 Related: [Jira setup](jira-setup.md) · [Configuration reference](configuration-reference.md) · [Troubleshooting](troubleshooting.md)
 
@@ -17,8 +17,6 @@ Related: [Jira setup](jira-setup.md) · [Configuration reference](configuration-
 - [Configure](#configure)
 - [Run with Docker](#run-with-docker)
 - [Container configuration](#container-configuration)
-- [Deploy](#deploy)
-- [Register with the Marketplace Service](#register-with-the-marketplace-service)
 - [Verify](#verify)
 - [Tests](#tests)
 - [CI/CD and releases](#cicd-and-releases)
@@ -59,7 +57,7 @@ The JVM build is started with `java -jar target/quarkus-app/quarkus-run.jar`. To
 | `ODM_PRODUCT_PLANE_MARKETPLACE_SERVICE_ADDRESS` | Marketplace Service base URL |
 | `QUARKUS_CONFIG_LOCATIONS` | Path of an extra configuration file |
 
-2. Provide the issue profiles (`jira.profiles.subscribe` and `jira.profiles.unsubscribe`) in an external file: `config/application.yml` in the working directory, or the path in `QUARKUS_CONFIG_LOCATIONS`. Start from the profile of the [use case](use-cases.md) that matches your Jira practice. Use case 1 (Issue API) works as-is on a project that has a `Task` issue type.
+2. Provide the issue profiles (`jira.profiles.subscribe` and `jira.profiles.unsubscribe`) in an external file: `config/application.yml` in the working directory, or the path in `QUARKUS_CONFIG_LOCATIONS`. Start from the profile of the [use case](../../README.md#1-pick-your-scenario) that matches your Jira practice. The [Jira issues](../scenarios/issue.md) profile works as-is on a project that has a `Task` issue type.
 
 Full details: [Configuration reference](configuration-reference.md). Secrets must come from the environment or mounted secrets, never from a committed file.
 
@@ -131,59 +129,6 @@ The `Dockerfile` copies `target/*-runner` to `/work/application`, so the native 
 - **User.** The process runs as user `1001` (group `root`, as OpenShift-style platforms expect). Mounted files must be readable by it.
 - **Startup validation.** As for any run, the container exits with a numbered list of problems if the configuration is invalid; read them with `docker logs`.
 
-## Deploy
-
-The recommended way is the container image, on Docker, Kubernetes or any container platform. Running the JVM build as a plain Java 21 process also works. Things to provide:
-
-- Port **9019** (`quarkus.http.port`).
-- The environment variables and secrets above, and the profile YAML as a mounted file (`/work/config/application.yml` in the image, or any path named by `QUARKUS_CONFIG_LOCATIONS`).
-- Outbound access to Jira (or `api.atlassian.com` and `auth.atlassian.com` on Cloud) and to the Marketplace Service.
-- **Network isolation**: the executor's endpoints have no authentication of their own. It must be reachable **only by the Marketplace Service and by the authenticating gateway**, never directly from Jira or the internet; otherwise anyone who can reach it can forge final results. The gateway may forward the caller's headers; the executor ignores them. The executor never logs or echoes request headers, bodies or tokens; keep it that way in any proxy or access log you add in front of it. See [Jira setup](jira-setup.md#8-securing-the-notification-endpoints).
-
-On **Kubernetes**, run the image as a `Deployment` with one replica per executor, take the credentials from a `Secret`, mount the profiles from a `ConfigMap`, and expose it with a cluster-internal `Service` only. A sketch:
-
-```yaml
-containers:
-  - name: executor
-    image: ghcr.io/opendatamesh-initiative/odm-platform-adapter-marketplace-executor-jira:<version>
-    ports:
-      - containerPort: 9019
-    envFrom:
-      - secretRef:
-          name: jira-executor-credentials   # JIRA_CLIENT_ID, JIRA_CLIENT_SECRET, ...
-    env:
-      - name: JIRA_SITE_URL
-        value: https://acme.atlassian.net
-      - name: JIRA_CORRELATION_FIELD
-        value: customfield_10050
-      - name: ODM_PRODUCT_PLANE_MARKETPLACE_SERVICE_ADDRESS
-        value: http://marketplace-service:8085
-    volumeMounts:
-      - name: profiles
-        mountPath: /work/config
-volumes:
-  - name: profiles
-    configMap:
-      name: jira-executor-profiles           # key: application.yml
-```
-
-Use a `NetworkPolicy` that admits only the Marketplace Service and the gateway to port 9019.
-
-## Register with the Marketplace Service
-
-The Marketplace Service forwards every request to the executors listed in its own configuration (`odm.utility-plane.marketplace-executors`), calling `{address}/api/v1/up/marketplace-executor/requests`. Add this executor:
-
-```yaml
-odm:
-  utility-plane:
-    marketplace-executors:
-      - name: JIRA
-        address: http://marketplace-executor-jira.internal:9019
-        active: true
-```
-
-The `name` is free. Restart the Marketplace Service if it does not reload configuration. The executor must also know the Marketplace Service (`ODM_PRODUCT_PLANE_MARKETPLACE_SERVICE_ADDRESS`) to post results to `/api/v1/pp/marketplace/requests/{uuid}/results`. Requests the executor's filter does not accept are answered `409`. Also [secure the notification endpoints](jira-setup.md#8-securing-the-notification-endpoints) (register the executor in your authenticating gateway) and create the Jira Automation rule or webhook.
-
 ## Verify
 
 1. **Health of the process.** Swagger UI at [http://localhost:9019/swagger-ui](http://localhost:9019/swagger-ui) and the OpenAPI document at [http://localhost:9019/api-docs](http://localhost:9019/api-docs) should load.
@@ -222,4 +167,4 @@ To make a release:
 5. Bump the POM to the next `-SNAPSHOT` version.
 
 ---
-[Back to README](../README.md) | [Troubleshooting](troubleshooting.md)
+[Back to README](../../README.md) | [Troubleshooting](troubleshooting.md)
