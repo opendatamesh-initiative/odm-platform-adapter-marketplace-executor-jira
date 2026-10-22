@@ -1,0 +1,51 @@
+{
+  "timestamp": 1760620800000,
+  "webhookEvent": "jira:issue_updated",
+  "user": {
+    "self": "https://jira.acme.internal/rest/api/2/user?username=jdoe",
+    "name": "jdoe",
+    "key": "JIRAUSER10100",
+    "emailAddress": "jane.doe@example.com",
+    "displayName": "Jane Doe",
+    "active": true,
+    "timeZone": "Europe/Rome"
+  },
+  "issue": {
+    "id": "10001",
+    "self": "https://jira.acme.internal/rest/api/2/issue/10001",
+    "key": "ACC-7",
+    "fields": {
+      "summary": "Grant urn:dp:finance:sales to a@b.c",
+      "issuetype": { "id": "3", "name": "Task", "subtask": false },
+      "project": { "id": "10000", "key": "ACC", "name": "Access" },
+      "status": {
+        "id": "6",
+        "name": "Closed",
+        "statusCategory": { "id": 3, "key": "done", "colorName": "green", "name": "Done" }
+      },
+      "resolution": { "id": "1", "name": "Fixed" },
+      "customfield_10050": "id-7"
+    }
+  },
+  "changelog": {
+    "id": "10300",
+    "items": [
+      {
+        "field": "status",
+        "fieldtype": "jira",
+        "from": "3",
+        "fromString": "In Progress",
+        "to": "6",
+        "toString": "Closed"
+      },
+      {
+        "field": "resolution",
+        "fieldtype": "jira",
+        "from": null,
+        "fromString": null,
+        "to": "1",
+        "toString": "Fixed"
+      }
+    ]
+  }
+}

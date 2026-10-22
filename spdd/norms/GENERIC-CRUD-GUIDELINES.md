@@ -2,8 +2,6 @@
 
 CRUD can be implemented through a small hierarchy of abstract classes that follow the **template method** pattern: the base class defines the **algorithm** (order of steps, transactions, error handling), and subclasses supply **hooks** and **type-specific behavior** by implementing abstract methods and optionally overriding protected hook methods.
 
-Base classes live under `org.opendatamesh.platform.adapter.marketplace.executor.starter.utils.services`.
-
 ---
 
 ## Class hierarchy
@@ -19,11 +17,9 @@ Base classes live under `org.opendatamesh.platform.adapter.marketplace.executor.
 - **`T`** — JPA entity.
 - **`ID`** — Primary key type (`Serializable`, e.g. `Long`, `String`).
 - **`R`** — API resource / DTO returned to callers.
-- **`F`** — Search or filter options used to build a `Specification<T>` from `org.opendatamesh.platform.adapter.marketplace.executor.starter.utils.repositories`.
+- **`F`** — Search or filter options used to build a `Specification<T>` (the template's own functional interface in `utils.repositories`).
 
 Pick the **shallowest** layer that fits: if the API does not need a separate `R`, you might only extend `GenericCrudServiceImpl`. When list endpoints support query filters and you expose DTOs, use **`GenericMappedAndFilteredCrudServiceImpl`**.
-
-The concrete service is an `@ApplicationScoped` bean. Callers inject that bean. `@Transactional` on the write methods, and the injected `TransactionHandler`, `PageableSortValidator`, and `Event<CrudLifecycleEvent>`, apply on that bean.
 
 ---
 
@@ -31,9 +27,9 @@ The concrete service is an `@ApplicationScoped` bean. Callers inject that bean. 
 
 ### `GenericCrudServiceImpl<T, ID>`
 
-1. **`getRepository()`** — Return a `PagingAndSortingAndSpecificationExecutorRepository<T, ID>` (`org.opendatamesh.platform.adapter.marketplace.executor.starter.utils.repositories`). Extend `EntityManagerRepository`, which implements that interface and supplies CRUD, paging, sorting, and specifications.
+1. **`getRepository()`** — Return a repository that supports CRUD, paging/sorting, and specifications (extend `EntityManagerRepository`, which implements `PagingAndSortingAndSpecificationExecutorRepository`).
 
-2. **`validate(T)`** — Business and field validation before create/overwrite. Throw `BadRequestException`, `NotFoundException`, or `InternalException` on failure.
+2. **`validate(T)`** — Business and field validation before create/overwrite. Throw your domain or API-layer exceptions on failure.
 
 3. **`reconcile(T)`** — Resolve references, defaults, or denormalized state after validation and before save (e.g. load related entities by foreign key).
 
@@ -44,11 +40,7 @@ Optional **hooks** (empty defaults; override when needed):
 - **Update:** `beforeOverwrite(T)`, `afterOverWrite(T, T)`, `afterOverwriteCommit(T)`
 - **Delete:** `beforeDelete(ID)`, `afterDelete(ID)`, `afterDeleteCommit(T)` (used with `deleteReturning`)
 
-**Utilities:** `exists(ID)` is protected; `findOne(ID)` throws `NotFoundException` when the row is missing.
-
-**Pagination:** `Page`, `PageRequest`, and `Sort` live in `org.opendatamesh.platform.adapter.marketplace.executor.starter.utils.repositories`. `findAll` requires a `PageRequest`: `page >= 0` and `size > 0`, otherwise `BadRequestException`. Override `getAllowedSortProperties()` when sortable fields must be restricted. `PageableSortValidator` rejects unknown sort paths via the JPA metamodel, including nested and embedded paths. When `getAllowedSortProperties()` returns a set, a property outside that set is rejected before the metamodel is consulted.
-
-**Lifecycle events:** `CrudLifecycleInterceptor` fires `CrudLifecycleEvent` (`CREATED`, `OVERWRITTEN`, `DELETED`) around the write methods. Observers use `@Observes(during = TransactionPhase.AFTER_SUCCESS)`. `HibernateChangeDataCapture` (`org.opendatamesh.platform.adapter.marketplace.executor.starter.utils.database`) fires `EntityChangeEvent` from the Hibernate post-insert, post-update, and post-delete listener. Observers of `EntityChangeEvent` use the same `@Observes(during = TransactionPhase.AFTER_SUCCESS)`.
+**Utilities:** `exists(ID)` is protected; `checkExistenceOrThrow(ID)` and `findOne(ID)` typically throw a not-found exception when the row is missing.
 
 ### `GenericMappedCrudServiceImpl<R, T, ID>`
 
@@ -61,20 +53,13 @@ Delegation to a dedicated mapper class is common. Mapped operations are:
 
 - `findAllResources` / `findOneResource` / `createResource` / `overwriteResource` / `deleteReturningResource`
 
-Reads run inside `TransactionHandler.runInTransaction(...)` so lazy loading and mapping stay within a transactional boundary. `createResource` and `overwriteResource` call `create` / `overwrite` on the CDI bean so `@Transactional` and the after-commit hooks run.
-
 ### `GenericMappedAndFilteredCrudServiceImpl<F, R, T, ID>`
 
-1. **`getSpecFromFilters(F filters)`** — Build a `Specification<T>`. `Specification` is a `@FunctionalInterface` whose method is `toPredicate(Root, CriteriaQuery, CriteriaBuilder)`. Compose smaller specs with `SpecsUtils.combineWithAnd` and `SpecsUtils.combineWithOr`.
+1. **`getSpecFromFilters(F filters)`** — Build a `Specification<T>`, often by composing smaller specs (e.g. AND-combining a list of predicates).
 
-2. **`getRepository()`** — Must return `PagingAndSortingAndSpecificationExecutorRepository<T, ID>` so filtered queries are supported. `EntityManagerRepository` already does.
+2. **`getRepository()`** — May be declared again in this class so the implementation satisfies the abstract method from the filtered layer (same bean as in `GenericCrudServiceImpl`).
 
-Filtered list entry points:
-
-- `findAllFiltered(PageRequest, F)` — entities
-- `findAllResourcesFiltered(PageRequest, F)` — mapped resources
-
-**Note:** Override `findAll` / `findAllResources` only if you need different list behavior (for example, disabling generic pagination for a given aggregate).
+**Note:** `findAllFiltered` runs `getRepository().findAll(spec, pageRequest)`. Override `findAll` / `findAllResources` only if you need different list behavior (for example, disabling generic pagination for a given aggregate).
 
 ---
 
@@ -82,42 +67,60 @@ Filtered list entry points:
 
 The base class fixes the **order of operations**; subclasses should not change the sequence unless they intentionally override a public method (usually avoided).
 
-**Create** (`@Transactional`): `validate` → `reconcile` → `beforeCreation` → `save` → `afterCreation` → fire `CrudLifecycleEvent.CREATED` → register `afterCreationCommit` to run after `STATUS_COMMITTED`
+**Create:** `validate` → `reconcile` → `beforeCreation` → `save` → `afterCreation` → (after transaction) → `afterCreationCommit`
 
-**Overwrite** (`@Transactional`): `validate` → existence check (`checkExistenceOrThrow`) → `reconcile` → `beforeOverwrite` → `save` → `afterOverWrite` → fire `CrudLifecycleEvent.OVERWRITTEN` → register `afterOverwriteCommit` to run after `STATUS_COMMITTED`
+**Overwrite:** `validate` → existence check → `reconcile` → `beforeOverwrite` → `save` → `afterOverWrite` → `afterOverwriteCommit`
 
-**Delete** (`@Transactional`): existence check → `beforeDelete` → `deleteById` → `afterDelete` → fire `CrudLifecycleEvent.DELETED`
+**Delete:** existence check → `beforeDelete` → `deleteById` → `afterDelete`
 
-**`deleteReturning`:** `findOne` → map with the provided `Function` → `delete` on the CDI bean → `afterDeleteCommit`
+**`deleteReturning`:** `findOne` → map with provided `Function` → `delete` → `afterDeleteCommit`
 
-`findOne` loads the row inside `TransactionHandler.runInTransaction`, throws `NotFoundException` when it is missing, then calls `afterFindOne`. `findAll` validates the `PageRequest` and the sort, then queries, inside `TransactionHandler.runInTransaction`.
-
-Create, overwrite, and delete are `@Transactional` on the CDI bean. `afterCreationCommit` and `afterOverwriteCommit` are registered on `TransactionSynchronizationRegistry` and run only when the completion status is `STATUS_COMMITTED`. Read paths in mapped layers use **`TransactionHandler`**.
+Create/overwrite/delete are **`@Transactional`** on the CDI bean, so the transactional boundary is explicit inside the generic implementation. Read paths may use a small **`TransactionHandler`** (or equivalent) with `@Transactional` for mapped/filtered reads so lazy loading and mapping run inside a transactional boundary when needed.
 
 ---
 
 ## Transactions: two mechanisms
 
-- **`@Transactional`** on `create`, `overwrite`, and `delete` in `GenericCrudServiceImpl`: the write boundary. The concrete service is an `@ApplicationScoped` bean.
-- **`TransactionHandler`** (`@ApplicationScoped`): `runInTransaction` is `REQUIRED`; `runInNewTransaction` is `REQUIRES_NEW`. Mapped layers use `runInTransaction` for reads that map entities to resources.
-
-Use-case work that must be atomic and serializable uses `TransactionalOutboundPort`. `DefaultTransactionalOutboundPortImpl` runs that work with `QuarkusTransaction.joiningExisting()` and executes `SET TRANSACTION ISOLATION LEVEL SERIALIZABLE` on the PostgreSQL connection before the caller’s work.
+- **`@Transactional`** (on `create` / `overwrite` / `delete` in `GenericCrudServiceImpl`): used for writes in the generic CRUD flow.
+- **`TransactionHandler`** (or similar) in mapped layers: transactional wrapper for read operations that map entities to resources.
 
 When one service calls another (e.g. loading a related entity in `reconcile`), use the existing service API and stay aware of transaction boundaries if you need atomicity across multiple aggregates.
 
 ---
 
-## CRUD AOP (interceptor wrap)
+## Cross-cutting CRUD behaviour (AOP and events)
 
-`GenericCrudServiceImpl` is bound with `@GenericCrudIntercepted`. `CrudLifecycleInterceptor` extends `GenericCrudInterceptor` and fires `CrudLifecycleEvent` after create / overwrite / delete (including the mapped `*Resource` methods).
+The template wraps every generic CRUD service in **one interception point** around four method groups — **find**, **create**, **overwrite**, **delete** (mapped `*Resource` variants included) — and publishes two kinds of events.
 
-To wrap the same methods (history, stewardship, emitters, …), subclass `GenericCrudInterceptor`, override `aroundFind` / `aroundCreate` / `aroundOverwrite` / `aroundDelete`, and register the subclass as a CDI interceptor with `@GenericCrudIntercepted` and `@Priority`. Nested proxy calls (for example `createResource` → `create`) skip the `around*` methods so advice runs once.
+**Pick the mechanism by scope:**
 
-## JAX-RS resources and public API
+| Concern | Mechanism |
+| --- | --- |
+| Rule of **one aggregate** that must run in the same transaction as `save` / `delete` | CRUD **hook** on that service (`beforeCreation`, `afterOverWrite`, …) |
+| Concern that applies to **every** CRUD service the same way (history, audit, stewardship, emitters) | **CRUD wrap**: a subclass of the template's wrap type, one per concern |
+| Reaction **outside** the CRUD operation (notify, sync, invalidate) | **Event observer** |
+
+**Events:**
+
+- `CrudLifecycleEvent` (`CREATED`, `OVERWRITTEN`, `DELETED`) is fired by the template's own wrap after a CRUD write: an **operation-level** signal.
+- `EntityChangeEvent` is fired by `HibernateChangeDataCapture` on every insert, update and delete, including those not made through a CRUD service: an **entity-level** signal.
+- Observers that cause side effects outside the database run **after commit**, so a rolled-back write never leaks.
+
+**Rules:**
+
+- A wrap holds **no business policy** and does not change arguments or results. Policy belongs in hooks or use cases.
+- A wrap runs **once per external call**: nested calls (`createResource` → `create`) are not advised again.
+- Several wraps on the same methods declare an **explicit order**.
+- Use cases and outbound port implementations are **never** wrapped. Use cases reach cross-cutting behaviour through ports.
+
+**Quarkus:** subclass `GenericCrudInterceptor`, override `aroundFind` / `aroundCreate` / `aroundOverwrite` / `aroundDelete`, annotate it `@Interceptor @GenericCrudIntercepted` and order it with `@Priority`. Events are fired with CDI `Event<T>`; after-commit observers use `@Observes(during = TransactionPhase.AFTER_SUCCESS)`.
+
+---
+
+## Controllers and public API
 
 - Prefer **`…Resource` methods** for HTTP adapters so the layer works with `R`, not entities.
-- If path parameters must **override** fields in the body (e.g. id in URL vs body), set the field from the path, then call the `*Resource` method.
-- JAX-RS resources live in the adopting service (`@Path`). Do not put them under a versioned `rest` package. Template inbound HTTP helpers live in `org.opendatamesh.platform.adapter.marketplace.executor.starter.utils.rest`. Outbound HTTP uses `org.opendatamesh.platform.adapter.marketplace.executor.starter.utils.client.RestUtils`.
+- If path parameters must **override** fields in the body (e.g. id in URL vs body), override the `*Resource` method, set the field from the path, then call `super`.
 
 ---
 
@@ -125,12 +128,10 @@ To wrap the same methods (history, stewardship, emitters, …), subclass `Generi
 
 A typical filtered, mapped service:
 
-- `@ApplicationScoped`, extends `GenericMappedAndFilteredCrudServiceImpl<MySearchOptions, MyResource, MyEntity, MyIdType>`.
+- Extends `GenericMappedAndFilteredCrudServiceImpl<MySearchOptions, MyResource, MyEntity, MyIdType>`.
 - Implements `validate`, `reconcile`, `getSpecFromFilters`, `getRepository`, `toRes`, `toEntity`.
 - Uses `beforeCreation` / `beforeOverwrite` for rules that depend on persisted state (e.g. uniqueness excluding the current row).
-- Builds `Specification` instances from filter fields, composed with `SpecsUtils` AND/OR as needed.
-
-Name filters can use `SpecsUtils.escapeLikeParameter`. Return an allow-list from `getAllowedSortProperties()` when sortable fields must be restricted.
+- Builds `Specification` instances from filter fields, composed with AND/OR as needed.
 
 ---
 
@@ -140,10 +141,8 @@ Name filters can use `SpecsUtils.escapeLikeParameter`. Return an allow-list from
 
 2. **Use hooks** for database-dependent rules (uniqueness excluding self, side effects) so they run in the same transaction as `save` / `delete`.
 
-3. **Repository** must support paging and specifications if you use the filtered base class. Extend `EntityManagerRepository`. Static nested spec helpers on the repository are a common style; `SpecsUtils` combines them with AND/OR.
+3. **Repository** must support paging and specifications if you use the filtered base class; static nested `Spec` helpers on the repository are a common style.
 
-4. **Throw** `NotFoundException`, `BadRequestException`, `ResourceConflictException`, and `InternalException` (`OdmApiException` in `org.opendatamesh.platform.adapter.marketplace.executor.starter.exceptions`). The adopting service maps those exceptions to HTTP status codes.
+4. **Throw** exceptions that your global handler maps to HTTP status codes consistently.
 
-5. If an aggregate **must not** support generic `findAll(PageRequest)`, override those methods and throw an explicit "not supported" (or equivalent) with a clear message.
-
-6. **`PageableSortValidator`** rejects unknown sort paths via the JPA metamodel, including nested and embedded paths. An allow-list returned from `getAllowedSortProperties()` is checked first.
+5. If an aggregate **must not** support generic `findAll(PageRequest)`, override those methods and throw an explicit “not supported” (or equivalent) with a clear message.
