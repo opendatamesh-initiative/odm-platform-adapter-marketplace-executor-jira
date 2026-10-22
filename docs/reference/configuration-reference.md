@@ -1,6 +1,6 @@
 # Configuration reference
 
-[Back to README](../README.md)
+[Back to README](../../README.md)
 
 ## Overview
 
@@ -8,7 +8,7 @@ The executor is configured entirely through properties: where Jira is, how to lo
 
 All keys live under the `jira` prefix (YAML, kebab-case) unless stated otherwise. Any key can be overridden by an environment variable using the standard Quarkus mapping (upper case, dots and dashes become underscores); the explicit variables below are the ones referenced in `application.yml`.
 
-Related: [Provisioning](provisioning.md) · [Use cases](use-cases.md) · [Templates](templates.md) · [Troubleshooting](troubleshooting.md)
+Related: [Build and run](build-and-run.md) · [Examples](examples.md) · [Templates](templates.md) · [Troubleshooting](troubleshooting.md)
 
 ## Where to put the configuration
 
@@ -100,7 +100,7 @@ jira:
       costCenter: 'FIN-.*'
 ```
 
-A declined request gets `409` and produces no side effect. If **no** executor accepts a request, the Marketplace Service rolls the submission back with "No executor was able to handle the request": the request fails fast instead of staying `PENDING` forever. The filter is re-applied when a notification arrives (`NOT_HANDLED_BY_EXECUTOR`). In an environment variable, a comma separates list items; if a regex contains a comma, configure it in the YAML file. For running several executors, see [Use case 5](use-cases.md#use-case-5---several-executors-behind-one-marketplace).
+A declined request gets `409` and produces no side effect. If **no** executor accepts a request, the Marketplace Service rolls the submission back with "No executor was able to handle the request": the request fails fast instead of staying `PENDING` forever. The filter is re-applied when a notification arrives (`NOT_HANDLED_BY_EXECUTOR`). In an environment variable, a comma separates list items; if a regex contains a comma, configure it in the YAML file. For running several executors, see [Several executors](examples.md#several-executors-behind-one-marketplace).
 
 ## Issue profiles
 

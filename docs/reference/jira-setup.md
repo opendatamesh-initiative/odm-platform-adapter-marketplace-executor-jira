@@ -1,6 +1,6 @@
 # Jira setup
 
-[Back to README](../README.md)
+[Back to README](../../README.md)
 
 ## Overview
 
@@ -9,7 +9,7 @@ For the executor to work, Jira must be prepared in two directions:
 1. **Jira lets the executor in.** A dedicated integration identity (a service account, API token or Personal Access Token), permission to create the issues, and the custom field that ties an issue to a marketplace request.
 2. **Jira calls the executor back.** When an issue is completed, an Automation rule (or a native webhook) sends a small JSON message so the marketplace learns the outcome. That message goes through an **authenticating gateway**, which checks who is calling.
 
-This page covers the steps shared by every Jira practice. The settings that depend on the practice (issue types, request types, Automation incoming webhooks) are in the [use cases](use-cases.md).
+This page covers the steps shared by every Jira practice. The settings that depend on the practice (issue types, request types, Automation incoming webhooks) are in the [scenario pages](../../README.md#1-pick-your-scenario).
 
 **Prerequisites:** Jira Cloud, or Jira Data Center 8.14 or later, and an **authenticating gateway** to authenticate the notification endpoints (see [Securing the notification endpoints](#8-securing-the-notification-endpoints)).
 
@@ -29,7 +29,7 @@ Items marked "verify on your instance" depend on the Atlassian release; check th
 10. [Completion channel B - native webhook](#10-completion-channel-b---native-webhook)
 11. [Rotating secrets](#rotating-secrets)
 
-Related: [Use cases](use-cases.md) · [Provisioning](provisioning.md) · [Configuration reference](configuration-reference.md) · [Troubleshooting](troubleshooting.md)
+Related: [Scenarios](../../README.md#1-pick-your-scenario) · [Build and run](build-and-run.md) · [Configuration reference](configuration-reference.md) · [Troubleshooting](troubleshooting.md)
 
 ## 1. Integration identity
 
@@ -95,7 +95,7 @@ The executor writes the marketplace request UUID in a **single-line text custom 
 - The correlation field on the request type, or `correlation-via-edit: true`.
 - The requester must be a **customer** of the service project and the integration identity a **service desk agent**.
 - Add the request types to a portal group so customers see their requests.
-- If approvals are part of the workflow, note the status that means "declined" and map it to `REFUSED` in the outcome rules ([Use case 2](use-cases.md#use-case-2---jira-service-management-requests)).
+- If approvals are part of the workflow, note the status that means "declined" and map it to `REFUSED` in the outcome rules ([Jira Service Management](../scenarios/service-desk.md)).
 
 ## 6. Statuses, resolutions and workflow
 
@@ -164,7 +164,7 @@ Subscribe and unsubscribe can share a project and workflow or use different ones
 
 ## 7. Automation incoming webhook (interface `AUTOMATION_WEBHOOK` only)
 
-For each operation create an Automation rule with the trigger *Incoming webhook*, and an action *Create issue* that sets the correlation field to `{{webhookData.correlationId}}`. Copy the generated URL and secret into `webhook-url` and `webhook-token`. Details and the body are in [Use case 3](use-cases.md#use-case-3---jira-automation-incoming-webhook).
+For each operation create an Automation rule with the trigger *Incoming webhook*, and an action *Create issue* that sets the correlation field to `{{webhookData.correlationId}}`. Copy the generated URL and secret into `webhook-url` and `webhook-token`. Details and the body are in [Automation incoming webhook](../scenarios/automation-webhook.md).
 
 ## 8. Securing the notification endpoints
 
@@ -388,8 +388,8 @@ Security checklist for the gateway:
 - [ ] Project and issue type, or service project and request types, ready
 - [ ] Resolutions and workflow checked against the outcome rules
 - [ ] Notification endpoints secured (gateway or blindata-agent) and the smoke test passes
-- [ ] One completion channel configured and tested (see the [smoke test](provisioning.md#verify))
+- [ ] One completion channel configured and tested (see the [smoke test](build-and-run.md#verify))
 
 ---
 
-[Back to README](../README.md) | [Use cases](use-cases.md) | [Provisioning](provisioning.md)
+[Back to README](../../README.md) | [Examples](examples.md) | [Build and run](build-and-run.md)

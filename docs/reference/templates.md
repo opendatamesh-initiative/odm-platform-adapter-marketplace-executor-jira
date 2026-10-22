@@ -1,12 +1,12 @@
 # Templates
 
-[Back to README](../README.md)
+[Back to README](../../README.md)
 
 ## Overview
 
 Everything the executor writes is a template: the summary and description of the Jira issue, and the messages the marketplace shows to users. Templates let you put request data (data product, ports, consumer, dates) into the text without writing code. The same engine renders both, with different data available.
 
-Related: [Configuration reference](configuration-reference.md) · [Use cases](use-cases.md) · [Concepts](concepts.md)
+Related: [Configuration reference](configuration-reference.md) · [Examples](examples.md) · [Concepts](concepts.md)
 
 ## Qute primer
 

@@ -1,109 +1,83 @@
 # ODM Platform Marketplace Executor for Jira
 
+> Fulfil the access requests of the [Open Data Mesh Platform](https://dpds.opendatamesh.org/) marketplace through **Jira issues and Jira Service Management requests**: an issue is opened for every subscribe or unsubscribe, and the request is completed when the issue is completed in Jira.
+
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square)](https://opensource.org/licenses/Apache-2.0)
 [![Java 21](https://img.shields.io/badge/Java-21-ED8B00.svg?style=flat-square&logo=openjdk&logoColor=white)](https://openjdk.org/)
 [![Quarkus 3.40](https://img.shields.io/badge/Quarkus-3.40-4695EB.svg?style=flat-square&logo=quarkus&logoColor=white)](https://quarkus.io/)
 
-Fulfil the access requests of the [Open Data Mesh Platform](https://dpds.opendatamesh.org/) marketplace through **Jira issues and Jira Service Management requests**.
+## What it does
 
-## What it is
-
-In a data mesh, people ask the marketplace for access to data products ("subscribe") and later ask to give it back ("unsubscribe"). Someone has to approve and carry out those requests. Most companies already do this kind of work in Jira, with their own projects, workflows and approvers.
-
-The Jira executor connects the two worlds. For every subscribe or unsubscribe request it opens a Jira issue (or a service desk request). Your team handles it in Jira as usual. When the issue is completed, the executor tells the marketplace the outcome: access granted, denied, revoked, or failed. Nobody has to copy information between tools.
-
-## What problem it solves
-
-- **No parallel process.** Access approvals follow the Jira workflow you already run, including approvals and the customer portal.
-- **A complete trail.** The marketplace shows the Jira issue key and link while the request is pending, and a descriptive final message (who closed it, the resolution, the last comment).
-- **Safe by design.** One issue always covers all the ports of a request, so there are no partial grants. The first final outcome wins and later issue edits cannot change it.
-- **Configuration only.** What goes into the issue, where it is created and how Jira statuses map to outcomes are all settings, not code.
-
-## Main capabilities
-
-- Creates an issue per `MARKETPLACE_SUBSCRIBE` or `MARKETPLACE_UNSUBSCRIBE` request, with a different setup for each.
-- Three ways to create the issue: the Jira **Issue API**, the **Jira Service Management request API** (raised on behalf of the requester) or a **Jira Automation incoming webhook**.
-- Works with **Jira Cloud** and **Jira Data Center** (8.14 or later).
-- Receives completion notifications from Jira (an Automation rule or a native webhook) and turns the issue status and resolution into `GRANTED`, `DENIED`, `REVOKED` or `ERROR`.
-- Request filter, so several executors can serve different data products behind one marketplace.
-- Message and issue content written as templates, with optional rich text (ADF) on Jira Cloud.
-- Stateless: the issue carries the request UUID in a custom field.
-
-## Use cases
-
-| You want to... | Use | Details |
-|:--|:--|:--|
-| Let a team handle access requests as normal Jira tasks in a project | `ISSUE` | [Use case 1](docs/use-cases.md#use-case-1---jira-software-issues-issue-api) |
-| Show requests in the Service Management portal, with approvals, raised for the real requester | `SERVICE_DESK_REQUEST` | [Use case 2](docs/use-cases.md#use-case-2---jira-service-management-requests) |
-| Build the issue with your own Automation logic | `AUTOMATION_WEBHOOK` | [Use case 3](docs/use-cases.md#use-case-3---jira-automation-incoming-webhook) |
-| Run on Jira Data Center | any of the above, with a Personal Access Token | [Use case 4](docs/use-cases.md#use-case-4---jira-data-center) |
-| Route data products to different executors | request filter | [Use case 5](docs/use-cases.md#use-case-5---several-executors-behind-one-marketplace) |
-
-Example: a consumer requests access to `urn:dp:finance:sales` in the marketplace. The executor opens issue `ACC-42` and the marketplace shows it as pending with the issue link. An approver sets the issue to *Done* with a comment. The marketplace request becomes `GRANTED` with a message such as "GRANTED through Jira issue ACC-42 ... Comment: Access granted".
-
-## Supported variants
-
-- **Deployment type:** `CLOUD` (default) or `DATA_CENTER`. Cloud authenticates with a service account (OAuth 2.0 client credentials) or an API token. Data Center uses a Personal Access Token, or a service account on Data Center 11.1 or later. REST v3 and rich text are Cloud only.
-- **Interface type:** per operation, `ISSUE`, `SERVICE_DESK_REQUEST` or `AUTOMATION_WEBHOOK`. Subscribe and unsubscribe can use different ones.
-
-## How it works
+When someone asks for access to a data product in the marketplace (or asks for it to be removed), the executor opens a **Jira issue** (or a Jira Service Management request) with everything already filled in. Your team handles it in Jira as usual. When the issue is completed, the marketplace shows whether access was **granted, denied, revoked or failed**, with the issue link, the resolution and the last comment.
 
 ```mermaid
 flowchart LR
-  C[Consumer] -->|requests access| M[Marketplace Service]
-  M -->|subscribe / unsubscribe| E[Jira Executor]
-  E -->|creates issue or request| J[Jira]
-  E -->|PENDING + issue link| M
-  J -->|status change: Automation rule or webhook| A[Auth gateway]
-  A --> E
+  U[Consumer requests access<br/>in the marketplace] --> M[Marketplace Service]
+  M --> E[Executor]
+  E -->|opens issue| J[Jira<br/>workflow and approvals]
+  E -.->|PENDING + issue link| M
+  J -->|issue completed| G[Gateway] --> E
   E -->|GRANTED / DENIED / REVOKED / ERROR| M
 ```
 
-Details in [Concepts](docs/concepts.md).
+## Capabilities
 
-## Quick start
+- **Your existing process.** Access approvals follow the Jira workflow you already run, including approvals and the customer portal.
+- **Three ways to create the issue.** The Jira Issue API, a Jira Service Management request raised on behalf of the requester, or your own Jira Automation rule.
+- **Jira Cloud and Data Center.** Cloud with a service account or an API token, Data Center 8.14 or later with a Personal Access Token.
+- **Subscribe and unsubscribe.** Each has its own issue definition and outcome mapping.
+- **Configuration only.** Issue content, where it is created and how statuses and resolutions map to outcomes are YAML, with no code.
+- **Request filter.** Send only some data products, consumers or requests to Jira, so several executors can work side by side.
+- **Serverless, scales to zero.** A small native image that runs on Cloud Run, Knative, KEDA or Azure Container Apps and costs nothing when idle.
+- **Safe by design.** One issue covers all the ports of a request, so there are no partial grants, and the first final status wins.
 
-You need a running Marketplace Service and a Jira site with a correlation custom field, plus either Java 21 (Maven option) or Docker (image option).
+## Get started in three steps
 
-**With Maven**
+### 1. Pick your scenario
 
-```bash
-export JIRA_SITE_URL=https://acme.atlassian.net
-export JIRA_API_URL=https://api.atlassian.com/ex/jira/<cloudId>
-export JIRA_CLIENT_ID=... JIRA_CLIENT_SECRET=...
-export JIRA_CORRELATION_FIELD=customfield_10050
-./mvnw quarkus:dev          # listens on port 9019
-```
-
-**With Docker** (published on every release, no Java needed)
-
-```bash
-docker run --rm -p 9019:9019 \
-  -e JIRA_SITE_URL=https://acme.atlassian.net \
-  -e JIRA_API_URL=https://api.atlassian.com/ex/jira/<cloudId> \
-  -e JIRA_CLIENT_ID=... -e JIRA_CLIENT_SECRET=... \
-  -e JIRA_CORRELATION_FIELD=customfield_10050 \
-  -e ODM_PRODUCT_PLANE_MARKETPLACE_SERVICE_ADDRESS=http://host.docker.internal:8085 \
-  -v "$(pwd)/config/application.yml:/work/config/application.yml:ro" \
-  ghcr.io/opendatamesh-initiative/odm-platform-adapter-marketplace-executor-jira:<version>
-```
-
-The image is also on Docker Hub as `opendatamesh/odm-platform-adapter-marketplace-executor-jira`.
-
-You must also provide the issue profiles (`jira.profiles.subscribe` and `jira.profiles.unsubscribe`) in an external `config/application.yml` (mounted at `/work/config/application.yml` in the container). The full walkthrough is in [Provisioning](docs/provisioning.md); ready-made profiles are in [Use cases](docs/use-cases.md).
-
-## Documentation
-
-| Document | What you find there |
+| Your organisation... | Scenario |
 |:--|:--|
-| [Concepts](docs/concepts.md) | Architecture, request lifecycle, status rules, mapping, privacy, scope |
-| [Use cases](docs/use-cases.md) | Five use cases, each with configuration and an example run |
-| [Jira setup](docs/jira-setup.md) | What a Jira admin must prepare: identity, permissions, fields, rules, webhooks |
-| [Provisioning](docs/provisioning.md) | Build, run (Maven or Docker), deploy, CI/CD and releases, secure the notification endpoints, verify, rotate secrets |
-| [Configuration reference](docs/configuration-reference.md) | Every property, default, environment variable and validation rule |
-| [Templates](docs/templates.md) | Qute templates for issue content and messages, and the data they can use |
-| [API reference](docs/api-reference.md) | The three HTTP endpoints, payloads and answers |
-| [Troubleshooting](docs/troubleshooting.md) | Logs, requests stuck in `PENDING`, ignored events, startup errors |
+| lets a team handle access requests as normal tasks in a Jira project | [**Jira issue**](docs/scenarios/issue.md): the fastest to set up |
+| runs requests through a Jira Service Management portal, with approvals | [**Service Management request with approvals**](docs/scenarios/service-desk.md) |
+| wants the issue built by its own Automation logic (routing, extra fields, sub-tasks) | [**Your own Automation rule**](docs/scenarios/automation-webhook.md) |
+
+Not sure? Start with the **Jira issue**: it works on any project with a `Task` issue type and you can switch later by changing one file. Every scenario handles both access requests and access removals. The scenario pages use Jira Cloud; for Data Center see [Examples](docs/reference/examples.md#jira-data-center).
+
+The scenario page covers the Jira side and gives you the executor configuration file.
+
+### 2. Pick your platform
+
+| You run on... | Quickstart |
+|:--|:--|
+| Google Cloud | [**Cloud Run**](docs/platforms/cloud-run.md) |
+| Kubernetes with Knative | [**Knative Serving**](docs/platforms/knative.md) |
+| Kubernetes with KEDA | [**KEDA HTTP add-on**](docs/platforms/keda-http.md) |
+| Azure | [**Azure Container Apps**](docs/platforms/azure-container-apps.md) |
+
+The platform page deploys the executor, connects Jira back to it and runs an end-to-end test. Docker, plain Kubernetes or a VM: see [Deployment](docs/reference/deployment.md).
+
+### 3. Test it
+
+The last step of the platform page: request access in the marketplace, complete the issue in Jira, and watch the request become `GRANTED`.
+
+**What you need before you start:** a Jira Cloud site with an organisation admin and a Jira admin, a running ODM Marketplace Service, a running [blindata-agent](docs/reference/jira-setup.md#option-b-blindata-agent) reachable by Jira over HTTPS (it authenticates the Jira callback), and the rights to deploy on your platform.
+
+## In depth
+
+Read these when you need more than the quickstart: production hardening, other options, every setting.
+
+| Document | Contents |
+|:--|:--|
+| [Concepts](docs/reference/concepts.md) | Architecture, request lifecycle, mapping, status rules, privacy, security model, limits |
+| [Jira setup](docs/reference/jira-setup.md) | Identity, permissions, correlation field, resolutions and workflow, gateway options, OAuth with Entra ID, Automation rule and native webhook channels, secret rotation |
+| [Deployment](docs/reference/deployment.md) | Which platforms fit and why, common requirements, containers and Kubernetes, scale-in limit, cost |
+| Platform details: [Cloud Run](docs/reference/deploy-cloud-run.md), [Knative](docs/reference/deploy-knative.md), [KEDA](docs/reference/deploy-keda-http.md), [Azure Container Apps](docs/reference/deploy-azure-container-apps.md) | Why each setting, network isolation, alternative gateways, native webhook functions, declarative files, day 2 operations, platform troubleshooting |
+| [Configuration reference](docs/reference/configuration-reference.md) | Every property, default, environment variable and validation rule |
+| [Templates](docs/reference/templates.md) | Qute templates for issue content and messages, and the data they can use |
+| [Examples](docs/reference/examples.md) | Step-by-step example runs per scenario, Jira Data Center, several executors |
+| [API reference](docs/reference/api-reference.md) | The three HTTP endpoints, payloads and answers |
+| [Build, run locally and release](docs/reference/build-and-run.md) | Maven and Docker builds, local run, tests, CI/CD and releases |
+| [Troubleshooting](docs/reference/troubleshooting.md) | Logs, requests stuck in `PENDING`, ignored events, startup errors |
 
 ## Related links
 

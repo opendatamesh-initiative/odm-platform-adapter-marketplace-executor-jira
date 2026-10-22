@@ -38,6 +38,7 @@ These apply to every feature. The dedicated norm files **extend** them; they nev
 | Entity CRUD with optional DTO mapping and/or filtered list APIs | [`GENERIC-CRUD-GUIDELINES.md`](./GENERIC-CRUD-GUIDELINES.md) |
 | Both (e.g. use case that delegates persistence to core CRUD services) | **Both** — use cases call core services **via outbound ports**, not directly from the use case class |
 | A call to, or a payload from, a system the service does not own | [`INTEGRATIONS.md`](./INTEGRATIONS.md) |
+| Work that runs in the background (async calls, fan-out, heavy computation) | [`ASYNC_EXECUTION.md`](./ASYNC_EXECUTION.md) |
 | New or changed configuration | [`CONFIGURATION.md`](./CONFIGURATION.md) |
 | New or changed public endpoint | [`API_DESIGN.md`](./API_DESIGN.md) |
 
@@ -51,6 +52,7 @@ These apply to every feature. The dedicated norm files **extend** them; they nev
 | [PACKAGE_STRUCTURE.md](./PACKAGE_STRUCTURE.md) | Package by aggregate, versioned HTTP tree, where each kind of class goes |
 | [INTEGRATIONS.md](./INTEGRATIONS.md) | Clients per external system, anti-corruption, error translation, resilience |
 | [TESTING.md](./TESTING.md) | `*Test` (unit) vs `*IT` (running application), tests per layer, traceability, isolation |
+| [ASYNC_EXECUTION.md](./ASYNC_EXECUTION.md) | `AsyncExecutorService` (virtual threads, I/O) vs `PlatformThreadExecutorService` (platform threads, CPU or pinning), concurrency caps, executor configuration |
 | [CONFIGURATION.md](./CONFIGURATION.md) | Typed, validated-at-startup configuration; behaviour selected by configuration; safe defaults |
 | [API_DESIGN.md](./API_DESIGN.md) | Versioning, breaking changes, OpenAPI contract, uniform responses |
 
